@@ -44,7 +44,7 @@ class Login extends \Kotchasan\Login implements \Kotchasan\LoginInterface
       ->toArray();
     $login_result = null;
     foreach ($query->execute() as $item) {
-      if ($item['password'] == sha1($password.$item[reset(self::$cfg->login_fields)])) {
+      if ($item['password'] == md5($password.$item[reset(self::$cfg->login_fields)])) {
         $login_result = $item;
         break;
       }
