@@ -1,4 +1,4 @@
-/*
+/**
  * GAutoComplete
  *
  * @filesource js/autocomplete.js
@@ -19,6 +19,7 @@
         get: $K.emptyFunction,
         populate: $K.emptyFunction,
         onRequest: $K.emptyFunction,
+        onSuccess: $K.emptyFunction,
         loadingClass: 'wait',
         url: false,
         interval: 300
@@ -42,24 +43,34 @@
       display.className = options.className;
       display.style.left = '-100000px';
       display.style.position = 'absolute';
-      display.style.display = 'table';
+      display.style.display = 'block';
       display.style.zIndex = 9999;
       function _movehighlight(id) {
         listindex = Math.max(0, id);
         listindex = Math.min(list.length - 1, listindex);
-        forEach(list, function (item, index) {
+        var selItem = null;
+        forEach(list, function () {
           if (listindex == this.itemindex) {
-            item.addClass('select');
+            this.addClass('select');
+            selItem = this;
           } else {
-            item.removeClass('select');
+            this.removeClass('select');
           }
         });
+        return selItem;
       }
-      var _mouseclick = function () {
+      function onSelect() {
         if (showing) {
           _hide();
-          options.callBack.call(this.datas);
+          try {
+            options.callBack.call(this.datas);
+          } catch (e) {
+          }
         }
+      }
+      var _mouseclick = function () {
+        onSelect.call(this);
+        options.onSuccess.call(input);
       };
       var _mousemove = function () {
         _movehighlight(this.itemindex);
@@ -67,7 +78,8 @@
       function _populateitems(datas) {
         display.innerHTML = '';
         list = new Array();
-        var f, ret = options.prepare.call(datas);
+        var f,
+          ret = options.prepare.call(datas);
         if (ret && ret != '') {
           var p = ret.toDOM();
           display.appendChild(p);
@@ -93,7 +105,7 @@
         display.style.left = '-100000px';
         showing = false;
       }
-      var _dokeyup = function () {
+      var _search = function () {
         window.clearTimeout(self.timer);
         req.abort();
         if (!cancleEvent) {
@@ -115,8 +127,17 @@
                   } else {
                     display.setValue(xhr.responseText);
                   }
-                  display.style.left = input.getLeft() + 'px';
-                  display.style.top = (input.getTop() + input.getHeight() + 5) + 'px';
+                  var vp = input.viewportOffset(),
+                    dm = input.getDimensions(),
+                    cw = document.viewport.getWidth();
+                  display.style.width = dm.width + 'px';
+                  display.style.left = Math.max(0, (vp.left + dm.width > cw ? cw - dm.width : vp.left)) + 'px';
+                  var h = display.getDimensions().height;
+                  if ((vp.top + dm.height + 5 + h) >= (document.viewport.getHeight() + document.viewport.getscrollTop())) {
+                    display.style.top = (vp.top - h - 5) + 'px';
+                  } else {
+                    display.style.top = (vp.top + dm.height + 5) + 'px';
+                  }
                   showing = true;
                 } else {
                   _hide();
@@ -129,27 +150,46 @@
         }
         cancleEvent = false;
       };
+      function _showitem(item) {
+        if (item) {
+          var top = item.getTop() - display.getTop();
+          var height = display.getHeight();
+          if (top < display.scrollTop) {
+            display.scrollTop = top;
+          } else if (top > height) {
+            display.scrollTop = top - height + item.getHeight();
+          }
+        }
+      }
       function _dokeydown(evt) {
         var key = GEvent.keyCode(evt);
         if (key == 40) {
-          _movehighlight(listindex + 1);
+          _showitem(_movehighlight(listindex + 1));
           cancleEvent = true;
         } else if (key == 38) {
-          _movehighlight(listindex - 1);
+          _showitem(_movehighlight(listindex - 1));
           cancleEvent = true;
         } else if (key == 13) {
           cancleEvent = true;
+          this.removeClass(options.loadingClass);
           forEach(list, function () {
             if (this.itemindex == listindex) {
-              _mouseclick.call(this);
+              onSelect.call(this);
             }
           });
+          options.onSuccess.call(input);
+        } else if (key == 32) {
+          if (this.value == '') {
+            _search();
+            cancleEvent = true;
+          }
         }
         if (cancleEvent) {
           GEvent.stop(evt);
         }
       }
-      input.addEvent('keyup', _dokeyup);
+      input.addEvent('click', _search);
+      input.addEvent('keyup', _search);
       input.addEvent('keydown', _dokeydown);
       input.addEvent('blur', function () {
         _hide();

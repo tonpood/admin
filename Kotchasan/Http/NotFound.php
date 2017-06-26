@@ -1,5 +1,5 @@
 <?php
-/*
+/**
  * @filesource Kotchasan/Http/NotFound.php
  * @link http://www.kotchasan.com/
  * @copyright 2016 Goragod.com
@@ -26,8 +26,9 @@ class NotFound extends Response
    */
   public function __construct($message = null, $code = 404)
   {
-    parent::__construct($code, $message);
-    $response = $this->withProtocolVersion('1.0')->withAddedHeader('Status', '404 Not Found');
+    $message = empty($message) ? '404 Not Found' : $message;
+    parent::__construct($code);
+    $response = $this->withProtocolVersion('1.0');
     if ($message) {
       $response->withContent($message);
     }

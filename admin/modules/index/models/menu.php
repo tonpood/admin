@@ -26,7 +26,7 @@ class Model
   public static function adminMenu()
   {
     return array(
-      'vpo' => array(
+      'dashboard' => array(
         'text' => 'Dashboard',
         'url' => '?module=dashboard'
       ),

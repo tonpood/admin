@@ -1,5 +1,5 @@
 <?php
-/*
+/**
  * @filesource Kotchasan/Antispam.php
  * @link http://www.kotchasan.com/
  * @copyright 2016 Goragod.com
@@ -111,7 +111,9 @@ class Antispam extends \Kotchasan\KBase
       }
       // png image
       if ($toHTML) {
-        ob_end_flush();
+        if (ob_get_length() > 0) {
+          ob_end_flush();
+        }
         ob_start();
         imagepng($im);
         $image_string = ob_get_contents();

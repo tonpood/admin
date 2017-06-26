@@ -1,5 +1,5 @@
 <?php
-/*
+/**
  * @filesource Kotchasan/Database/Driver.php
  * @link http://www.kotchasan.com/
  * @copyright 2016 Goragod.com
@@ -9,7 +9,6 @@
 namespace Kotchasan\Database;
 
 use \Kotchasan\Database\QueryBuilder;
-use \Kotchasan\Database\Schema;
 use \Kotchasan\Database\DbCache as Cache;
 use \Kotchasan\Cache\Cacheitem as Item;
 use \Kotchasan\Database\Query;
@@ -156,10 +155,7 @@ abstract class Driver extends Query
   public function customQuery($sql, $toArray = false, $values = array())
   {
     $result = $this->doCustomQuery($sql, $values);
-    if ($result === false) {
-      $this->logError($sql, $this->error_message);
-      $result = array();
-    } elseif (!$toArray) {
+    if ($result && !$toArray) {
       foreach ($result as $i => $item) {
         $result[$i] = (object)$item;
       }
@@ -223,26 +219,6 @@ abstract class Driver extends Query
       $result = $this->query($sql, $values);
     }
     return $result;
-  }
-
-  /**
-   * ฟังก์ชั่นตรวจสอบว่ามีฟิลด์ หรือไม่.
-   *
-   * @param string $table_name ชื่อตาราง
-   * @param string $field ชื่อฟิลด์
-   * @return boolean คืนค่า true หากมีฟิลด์นี้อยู่ ไม่พบคืนค่า false
-   */
-  public function fieldExists($table_name, $field)
-  {
-    if (!empty($table_name) && !empty($field)) {
-      $field = strtolower($field);
-      foreach (Schema::create($this->db)->fields($table_name) as $key => $values) {
-        if (strtolower($key) == $field) {
-          return true;
-        }
-      }
-    }
-    return false;
   }
 
   /**
@@ -322,20 +298,6 @@ abstract class Driver extends Query
   }
 
   /**
-   * ฟังก์ชั่นจัดการ error ของ database
-   *
-   * @param string $sql
-   * @param string $message
-   */
-  protected function logError($sql, $message)
-  {
-    $trace = debug_backtrace();
-    $trace = next($trace);
-    // บันทึก error
-    Logger::create()->error($sql.' : <em>'.$message.'</em> in <b>'.$trace['file'].'</b> on line <b>'.$trace['line'].'</b>');
-  }
-
-  /**
    * ฟังก์ชั่นประมวลผลคำสั่ง SQL ที่ไม่ต้องการผลลัพท์ เช่น CREATE INSERT UPDATE.
    *
    * @param string $sql
@@ -344,11 +306,7 @@ abstract class Driver extends Query
    */
   public function query($sql, $values = array())
   {
-    $result = $this->doQuery($sql, $values);
-    if ($result === false) {
-      $this->logError($sql, $this->error_message);
-    }
-    return $result;
+    return $this->doQuery($sql, $values);
   }
 
   /**
@@ -370,6 +328,19 @@ abstract class Driver extends Query
   public function tableExists($table_name)
   {
     return $this->doQuery("SELECT 1 FROM $table_name LIMIT 1") === false ? false : true;
+  }
+
+  /**
+   * ตรวจสอบคอลัมน์ของตารางว่ามีหรือไม่
+   *
+   * @param string $table_name ชื่อตาราง
+   * @param string $column_name ชื่อคอลัมน์
+   * @return boolean คืนค่า true ถ้ามี คืนค่า false ถ้าไม่มี
+   */
+  public function fieldExists($table_name, $column_name)
+  {
+    $result = $this->customQuery("SHOW COLUMNS FROM `$table_name` LIKE '$column_name'");
+    return empty($result) ? false : true;
   }
 
   /**
@@ -446,6 +417,17 @@ abstract class Driver extends Query
    * @return boolean สำเร็จ คืนค่า true, ผิดพลาด คืนค่า false
    */
   abstract public function update($table_name, $condition, $save);
+
+  /**
+   * ฟังก์ชั่นเพิ่มข้อมูลใหม่ลงในตาราง
+   * ถ้ามีข้อมูลเดิมอยู่แล้วจะเป็นการอัปเดท
+   * (ข้อมูลเดิมตาม KEY ที่เป็น UNIQUE)
+   *
+   * @param string $table_name ชื่อตาราง
+   * @param array|object $save ข้อมูลที่ต้องการบันทึก รูปแบบ array('key1'=>'value1', 'key2'=>'value2', ...)
+   * @return int|null insert คืนค่า id ที่เพิ่ม, update คืนค่า 0, ผิดพลาด คืนค่า null
+   */
+  abstract public function insertOrUpdate($table_name, $save);
 
   /**
    * เลือกฐานข้อมูล.

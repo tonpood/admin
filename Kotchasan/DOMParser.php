@@ -1,5 +1,5 @@
 <?php
-/*
+/**
  * @filesource Kotchasan/DOMParser.php
  * @link http://www.kotchasan.com/
  * @copyright 2016 Goragod.com
@@ -35,6 +35,7 @@ class DOMParser
   public function __construct($html, $charset = 'utf-8')
   {
     $patt = array(
+      '/^(.*)<body[^>]{0,}>(.*)<\/body>(.*)$/is' => '\\2',
       '#<(style|script)(.*?)>(.*?)</\\1>#is' => '',
       '@<!--.*-->@is' => '',
       '/<(\!|link|meta)[^>]+\>/i' => '',

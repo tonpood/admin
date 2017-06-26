@@ -1,5 +1,5 @@
 <?php
-/*
+/**
  * @filesource Gcms/Config.php
  * @link http://www.kotchasan.com/
  * @copyright 2016 Goragod.com
@@ -18,6 +18,12 @@ namespace Gcms;
 class Config extends \Kotchasan\Config
 {
   /**
+   * รายชื่อฟิลด์จากตารางสมาชิก สำหรับตรวจสอบการ login
+   *
+   * @var array
+   */
+  public $login_fields = array('username');
+  /**
    * สถานะสมาชิก
    * 0 สมาชิกทั่วไป
    * 1 ผู้ดูแลระบบ
@@ -34,8 +40,13 @@ class Config extends \Kotchasan\Config
    * @var array
    */
   public $color_status = array(
-    0 => '#0000CC',
-    1 => '#CC0000'
+    0 => '#259B24',
+    1 => '#FF0000',
+    2 => '#FF6600',
+    3 => '#3366FF',
+    4 => '#902AFF',
+    5 => '#660000',
+    6 => '#336600',
   );
   /**
    * ความกว้างสูงสุดของรูปประจำตัวสมาชิก
@@ -81,9 +92,15 @@ class Config extends \Kotchasan\Config
    */
   public $web_title = 'Kotchasan';
   /**
-   * admin template
+   * template
    *
    * @var string
    */
   public $skin = 'admin';
+  /*
+   * คีย์สำหรับการเข้ารหัส
+   *
+   * @var string
+   */
+  public $password_key = '12345678';
 }

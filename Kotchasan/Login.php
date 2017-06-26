@@ -1,5 +1,5 @@
 <?php
-/*
+/**
  * @filesource Kotchasan/Login.php
  * @link http://www.kotchasan.com/
  * @copyright 2016 Goragod.com
@@ -101,21 +101,24 @@ class Login extends \Kotchasan\KBase implements LoginInterface
       setCookie('login_password', '', $time, '/');
       self::$login_message = Language::get('Logout successful');
     } elseif (self::$request->post('action')->toString() === 'forgot') {
-      // ตรวจสอบอีเมล์สำหรับการขอรหัสผ่านใหม่
+      // ขอรหัสผ่านใหม่
       return $login->forgot(self::$request);
+    } elseif (!$login->from_submit && isset($_SESSION['login']) && is_array($_SESSION['login'])) {
+      // login อยู่แล้ว
+      return $login;
     } else {
       // ตรวจสอบค่าที่ส่งมา
       if (self::$text_username == '') {
         if ($login->from_submit) {
-          self::$login_message = Language::get('Please fill out this form');
+          self::$login_message = Language::get('Please fill in');
           self::$login_input = 'login_username';
         }
       } elseif (self::$text_password == '') {
         if ($login->from_submit) {
-          self::$login_message = Language::get('Please fill out this form');
+          self::$login_message = Language::get('Please fill in');
           self::$login_input = 'login_password';
         }
-      } elseif (!$login->from_submit || ($login->from_submit && self::$request->isSafe())) {
+      } elseif (!$login->from_submit || ($login->from_submit && self::$request->isReferer())) {
         // ตรวจสอบการ login กับฐานข้อมูล
         $login_result = $login->checkLogin(self::$text_username, self::$text_password);
         if (is_string($login_result)) {
@@ -129,7 +132,7 @@ class Login extends \Kotchasan\KBase implements LoginInterface
           setCookie('login_password', '', $time, '/');
         } else {
           // save login session
-          $login_result['password'] = self::$text_password;
+          unset($login_result['password']);
           $_SESSION['login'] = $login_result;
           // save login cookie
           $time = time() + 2592000;
@@ -208,7 +211,7 @@ class Login extends \Kotchasan\KBase implements LoginInterface
    */
   public static function isMember()
   {
-    return isset($_SESSION['login']) ? $_SESSION['login'] : null;
+    return empty($_SESSION['login']) ? null : $_SESSION['login'];
   }
 
   /**

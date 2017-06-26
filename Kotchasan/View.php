@@ -1,5 +1,5 @@
 <?php
-/*
+/**
  * @filesource Kotchasan/View.php
  * @link http://www.kotchasan.com/
  * @copyright 2016 Goragod.com
@@ -48,16 +48,23 @@ class View extends \Kotchasan\KBase
    * ใส่เนื้อหาลงใน $contens
    *
    * @param array $array ชื่อที่ปรากฏใน template รูปแบบ array(key1 => val1, key2 => val2)
-   * @param boolean $before true (default) ใส่ก่อน render, false ใส่หลัง render
    */
-  public function setContents($array, $before = true)
+  public function setContents($array)
   {
     foreach ($array as $key => $value) {
-      if ($before) {
-        $this->contents[$key] = $value;
-      } else {
-        $this->after_contents[$key] = $value;
-      }
+      $this->contents[$key] = $value;
+    }
+  }
+
+  /**
+   * ใส่เนื้อหาลงใน $contens หลัง render แล้ว
+   *
+   * @param array $array ชื่อที่ปรากฏใน template รูปแบบ array(key1 => val1, key2 => val2)
+   */
+  public function setContentsAfter($array)
+  {
+    foreach ($array as $key => $value) {
+      $this->after_contents[$key] = $value;
     }
   }
 
@@ -113,9 +120,6 @@ class View extends \Kotchasan\KBase
   public function renderHTML($template = null)
   {
     // default for template
-    if (!empty($this->metas)) {
-      $this->contents['/(<head.*)(<\/head>)/isu'] = '$1'.implode("\n", $this->metas)."\n".'$2';
-    }
     $this->contents['/{WEBTITLE}/'] = self::$cfg->web_title;
     $this->contents['/{WEBDESCRIPTION}/'] = self::$cfg->web_description;
     $this->contents['/{WEBURL}/'] = WEB_URL;
@@ -123,6 +127,9 @@ class View extends \Kotchasan\KBase
     $this->contents['/^[\s\t]+/m'] = '';
     foreach ($this->after_contents as $key => $value) {
       $this->contents[$key] = $value;
+    }
+    if (!empty($this->metas)) {
+      $this->contents['/(<head.*)(<\/head>)/isu'] = '$1'.implode("\n", $this->metas).'$2';
     }
     // แทนที่ลงใน Template
     if ($template === null) {
@@ -168,8 +175,6 @@ class View extends \Kotchasan\KBase
         } elseif (!isset($query_url[$match[2]])) {
           $query_url[$match[2]] = $match[3];
         }
-      } else {
-        $query_url[] = $item;
       }
     }
     if (is_array($f)) {
@@ -179,8 +184,6 @@ class View extends \Kotchasan\KBase
       foreach (explode('&', str_replace('&amp;', '&', $f)) as $item) {
         if (preg_match('/^(.*)=(.*)$/', $item, $match)) {
           $query_url[$match[1]] = $match[2];
-        } else {
-          $query_url[] = $item;
         }
       }
       $temp = $query_url;

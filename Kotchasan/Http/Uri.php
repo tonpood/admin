@@ -1,5 +1,5 @@
 <?php
-/*
+/**
  * @filesource Kotchasan/Http/Uri.php
  * @link http://www.kotchasan.com/
  * @copyright 2016 Goragod.com
@@ -50,13 +50,13 @@ class Uri extends \Kotchasan\KBase implements UriInterface
    */
   protected $path = '';
   /**
-   * Uri query string
+   * Uri query string หลัง ?
    *
    * @var string
    */
   protected $query = '';
   /**
-   * Uri fragment
+   * Uri fragment หลัง  #
    *
    * @var string
    */
@@ -124,7 +124,13 @@ class Uri extends \Kotchasan\KBase implements UriInterface
    */
   public static function createFromGlobals()
   {
-    $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') || (isset($_SERVER['SERVER_PORT']) && $_SERVER['SERVER_PORT'] == 443) ? 'https://' : 'http://';
+    if (isset($_SERVER['HTTP_X_FORWARDED_PROTO'])) {
+      $scheme = $_SERVER['HTTP_X_FORWARDED_PROTO'].'://';
+    } elseif ((!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') || (isset($_SERVER['SERVER_PORT']) && $_SERVER['SERVER_PORT'] == 443)) {
+      $scheme = 'https://';
+    } else {
+      $scheme = 'http://';
+    }
     if (isset($_SERVER['HTTP_X_FORWARDED_HOST'])) {
       $host = trim(current(explode(',', $_SERVER['HTTP_X_FORWARDED_HOST'])));
     } elseif (empty($_SERVER['HTTP_HOST'])) {
@@ -378,10 +384,10 @@ class Uri extends \Kotchasan\KBase implements UriInterface
       }
       $uri .= $path;
     }
-    if ($query != null) {
+    if ($query != '') {
       $uri .= '?'.$query;
     }
-    if ($fragment != null) {
+    if ($fragment != '') {
       $uri .= '#'.$fragment;
     }
     return $uri;
@@ -398,17 +404,13 @@ class Uri extends \Kotchasan\KBase implements UriInterface
    */
   private function isNonStandardPort($scheme, $host, $port)
   {
-    $schemes = array(
-      'http' => 80,
-      'https' => 443,
-    );
     if (!$scheme && $port) {
       return true;
     }
     if (!$host || !$port) {
       return false;
     }
-    return !isset($schemes[$scheme]) || $port !== $schemes[$scheme];
+    return ($scheme != 'http' && $scheme != 'https') || ($port != 80 && $port != 443);
   }
 
   /**
@@ -466,22 +468,18 @@ class Uri extends \Kotchasan\KBase implements UriInterface
   public function createBackUri($query_string)
   {
     $qs = array();
-    foreach ($this->parseQueryParams($this->query) AS $key => $value) {
+    foreach ($this->parseQueryParams($this->query) as $key => $value) {
       $key = ltrim($key, '_');
-      if (key_exists($key, $query_string) && $query_string[$key] === null) {
+      if ($key != 'token' && key_exists($key, $query_string) && $query_string[$key] === null) {
         continue;
       }
       if ($value !== null) {
         $qs['_'.$key] = rawurlencode($value);
       }
     }
-    foreach ($query_string AS $key => $value) {
+    foreach ($query_string as $key => $value) {
       if ($value !== null) {
-        if (is_int($key)) {
-          $qs[] = $value;
-        } else {
-          $qs[$key] = $value;
-        }
+        $qs[$key] = $value;
       }
     }
     return $this->withQuery($this->paramsToQuery($qs, true));
@@ -501,7 +499,7 @@ class Uri extends \Kotchasan\KBase implements UriInterface
         if (preg_match('/^(.*)=(.*)?$/', $item, $match)) {
           $result[$match[1]] = $match[2];
         } else {
-          $result[] = $item;
+          $result[$item] = null;
         }
       }
     }
@@ -519,10 +517,10 @@ class Uri extends \Kotchasan\KBase implements UriInterface
   {
     $qs = array();
     foreach ($params as $key => $value) {
-      if (is_int($key)) {
-        $qs[] = $value;
+      if ($value === null) {
+        $qs[$key] = $key;
       } else {
-        $qs[] = $key.'='.$value;
+        $qs[$key] = $key.'='.$value;
       }
     }
     return implode($encode ? '&amp;' : '&', $qs);
@@ -581,12 +579,12 @@ class Uri extends \Kotchasan\KBase implements UriInterface
    * แปลง POST เป็น query string สำหรับการส่งกลับไปหน้าเดิม ที่มาจากการโพสต์ด้วยฟอร์ม
    *
    * @param string $url URL ที่ต้องการส่งกลับ เช่น index.php
-   * @param array $query_string query string ที่ต้องการส่งกลับไปด้วย array('key' => 'value', ...)
+   * @param array $query_string (option) query string ที่ต้องการส่งกลับไปด้วย array('key' => 'value', ...)
    * @return string URL+query string
    */
-  public function postBack($url, $query_string)
+  public function postBack($url, $query_string = array())
   {
-    return $this->createBack($url, self::$request->getParsedBody(), $query_string);
+    return $this->createBack($url, $_POST, $query_string);
   }
 
   /**
@@ -598,7 +596,7 @@ class Uri extends \Kotchasan\KBase implements UriInterface
    */
   public function getBack($url, $query_string = array())
   {
-    return $this->createBack($url, self::$request->getQueryParams(), $query_string);
+    return $this->createBack($url, $_GET, $query_string);
   }
 
   /**
@@ -618,7 +616,7 @@ class Uri extends \Kotchasan\KBase implements UriInterface
         }
       }
     }
-    if (!key_exists('time', $query_string)) {
+    if (isset($query_string['time'])) {
       $query_string['time'] = time();
     }
     $qs = array();

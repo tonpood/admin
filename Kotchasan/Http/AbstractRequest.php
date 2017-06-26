@@ -1,5 +1,5 @@
 <?php
-/*
+/**
  * @filesource Kotchasan/Http/AbstractRequest.php
  * @link http://www.kotchasan.com/
  * @copyright 2016 Goragod.com
@@ -118,5 +118,62 @@ class AbstractRequest extends AbstractMessage implements RequestInterface
       }
     }
     return $clone;
+  }
+
+  /**
+   * สร้างคลาสจากลิงค์ และ รวมค่าที่มาจาก $_GET และ $_POST ด้วย
+   *
+   * @param string $uri
+   * @return \static
+   */
+  public static function createUriWithGet($uri)
+  {
+    $query = array();
+    foreach ($_GET as $key => $value) {
+      $query[$key] = $key.'='.$value;
+    }
+    if (!empty($query)) {
+      $uri .= (strpos($uri, '?') === false ? '?' : '&').implode('&', $query);
+    }
+    return Uri::createFromUri($uri);
+  }
+
+  /**
+   * สร้างคลาสจากลิงค์ และ รวมค่าที่มาจาก $_GET และ $_POST ด้วย
+   *
+   * @param string $uri
+   * @return \static
+   */
+  public static function createUriWithPost($uri)
+  {
+    $query = array();
+    foreach ($_POST as $key => $value) {
+      $query[$key] = $key.'='.$value;
+    }
+    if (!empty($query)) {
+      $uri .= (strpos($uri, '?') === false ? '?' : '&').implode('&', $query);
+    }
+    return Uri::createFromUri($uri);
+  }
+
+  /**
+   * สร้างคลาสจากลิงค์ และ รวมค่าที่มาจาก $_GET และ $_POST ด้วย
+   *
+   * @param string $uri
+   * @return \static
+   */
+  public function createUriWithGlobals($uri)
+  {
+    $query = array();
+    foreach ($_GET as $key => $value) {
+      $query[$key] = $value === null ? $key : $key.'='.$value;
+    }
+    foreach ($_POST as $key => $value) {
+      $query[$key] = $value === null ? $key : $key.'='.$value;
+    }
+    if (!empty($query)) {
+      $uri .= (strpos($uri, '?') === false ? '?' : '&').implode('&', $query);
+    }
+    return Uri::createFromUri($uri);
   }
 }

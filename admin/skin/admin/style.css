@@ -146,10 +146,10 @@ section > header {
   overflow: hidden;
   margin-top: 10px;
 }
-#to-bottom p {
+.footer p {
   line-height: 4em;
 }
-#to-bottom a {
+.footer a {
   color: inherit;
 }
 .wrapper {
@@ -284,4 +284,12 @@ fieldset.item {
 }
 .setup_frm > fieldset > legend > span {
   font-size: 1.8em;
+}
+/* tablet, small device */
+@media only screen and (max-width: 960px) {
+  .setup_frm {
+    display: block;
+    margin: 0;
+    border-bottom: 1px solid #DBDBDB;
+  }
 }

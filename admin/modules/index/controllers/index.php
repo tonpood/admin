@@ -32,7 +32,7 @@ class Controller extends \Kotchasan\Controller
   {
     // ตัวแปรป้องกันการเรียกหน้าเพจโดยตรง
     define('MAIN_INIT', __FILE__);
-    // check login
+    // เริ่มต้นใช้งาน session
     $request->initSession();
     // ตรวจสอบการ login
     Login::create();
@@ -68,7 +68,7 @@ class Controller extends \Kotchasan\Controller
       $view->setContents(array(
         // ID สมาชิก
         '/{LOGINID}/' => $login['id'],
-        // ชื่อ นามสกุล
+        // แสดงชื่อคน Login
         '/{LOGINNAME}/' => empty($login['name']) ? $login['username'] : $login['name'],
         // ไอคอนสมาชิก
         '/{USERICON}/' => WEB_URL.(is_file(ROOT_PATH.self::$cfg->usericon_folder.$login['id'].'.jpg') ? self::$cfg->usericon_folder.$login['id'].'.jpg' : 'skin/img/noicon.jpg'),

@@ -1,5 +1,5 @@
 <?php
-/*
+/**
  * @filesource Kotchasan/Http/Request.php
  * @link http://www.kotchasan.com/
  * @copyright 2016 Goragod.com
@@ -384,7 +384,7 @@ class Request extends AbstractRequest implements RequestInterface
   public function createToken()
   {
     $token = md5(uniqid(rand(), true));
-    $_SESSION[$token] = time();
+    $_SESSION[$token] = 0;
     return $token;
   }
 
@@ -400,20 +400,25 @@ class Request extends AbstractRequest implements RequestInterface
   }
 
   /**
-   * ฟังก์ชั่น ตรวจสอบ token ที่มาจากฟอร์ม
-   * ถ้าไม่มีจะตรวจสอบจาก Referer
+   * ฟังก์ชั่น ตรวจสอบ token ที่มาจากฟอร์ม และ ตรวจสอบ Referer ด้วย
+   * รับค่าที่มาจาก $_POST เท่านั้น
    * ฟังก์ชั่นนี้ต้องเรียกต่อจาก initSession() เสมอ
+   * อายุของ token กำหนดที่ TOKEN_LIMIT
    *
-   * @return boolean คืนค่า true ถ้ามีการ submit มาจากไซต์นี้
+   * @return boolean คืนค่า true ถ้า token ถูกต้องและไม่หมดอายุ
    */
   public function isSafe()
   {
-    $token = $this->globals(array('POST', 'GET'), 'token', null)->toString();
+    $token = $this->post('token')->toString();
     if ($token !== null) {
-      return isset($_SESSION[$token]) && $this->isReferer();
-    } else {
-      return $this->isReferer();
+      if (isset($_SESSION[$token]) && $_SESSION[$token] < TOKEN_LIMIT && $this->isReferer()) {
+        $_SESSION[$token] ++;
+        return true;
+      } else {
+        unset($_SESSION[$token]);
+      }
     }
+    return false;
   }
 
   /**
@@ -423,7 +428,7 @@ class Request extends AbstractRequest implements RequestInterface
    */
   public function isReferer()
   {
-    $host = empty($_SERVER["HTTP_HOST"]) ? $_SERVER["SERVER_NAME"] : $_SERVER["HTTP_HOST"];
+    $host = empty($_SERVER['HTTP_HOST']) ? $_SERVER['SERVER_NAME'] : $_SERVER['HTTP_HOST'];
     $referer = isset($_SERVER['HTTP_REFERER']) ? $_SERVER['HTTP_REFERER'] : '';
     if (preg_match("/$host/ui", $referer)) {
       return true;

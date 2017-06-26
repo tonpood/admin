@@ -1,4 +1,4 @@
-/*
+/**
  * Javascript Libraly for Kotchasan Framework
  *
  * @filesource js/gajax.js
@@ -46,6 +46,34 @@ window.$K = (function () {
   window.floatval = function (val) {
     var n = parseFloat(val);
     return isNaN(n) ? 0 : n;
+  };
+  window.round = function (val, digit) {
+    var value = Math.round(val * Math.pow(10, digit)) / Math.pow(10, digit);
+    if (val - value > 0) {
+      return (value + Math.floor(2 * Math.round((val - value) * Math.pow(10, (digit + 1))) / 10) / Math.pow(10, digit));
+    } else {
+      return value;
+    }
+  };
+  window.copyToClipboard = function (text) {
+    function selectElementText(element) {
+      if (document.selection) {
+        var range = document.body.createTextRange();
+        range.moveToElementText(element);
+        range.select();
+      } else if (window.getSelection) {
+        var range = document.createRange();
+        range.selectNode(element);
+        window.getSelection().removeAllRanges();
+        window.getSelection().addRange(range);
+      }
+    }
+    var element = document.createElement('div');
+    element.textContent = text;
+    document.body.appendChild(element);
+    selectElementText(element);
+    document.execCommand('copy');
+    element.remove();
   };
   window.trans = function (val) {
     try {
@@ -238,6 +266,14 @@ window.$K = (function () {
     },
     isGElement: function (o) {
       return o != null && typeof o == "object" && 'Ready' in o && 'element' in o;
+    },
+    toArray: function (o) {
+      var prop,
+        result = new Array();
+      for (prop in o) {
+        result.push(o[prop]);
+      }
+      return result;
     }
   });
   window.GClass = {
@@ -299,6 +335,7 @@ window.$K = (function () {
       if (this.element()) {
         this.parentNode.removeChild(this);
       }
+      return this;
     },
     setHTML: function (o) {
       try {
@@ -307,6 +344,7 @@ window.$K = (function () {
         o = o.replace(/[\r\n\t]/g, '').replace(/<script[^>]*>.*?<\/script>/ig, '');
         this.appendChild(o.toDOM());
       }
+      return this;
     },
     getTop: function () {
       return this.viewportOffset().top;
@@ -327,21 +365,19 @@ window.$K = (function () {
       return this.clientHeight - parseInt(this.getStyle('paddingTop')) - parseInt(this.getStyle('paddingBottom'));
     },
     viewportOffset: function () {
-      var t = this.offsetTop;
-      var l = this.offsetLeft;
-      var p = this.offsetParent;
-      while (p !== null) {
-        t += p.offsetTop;
-        l += p.offsetLeft;
-        if (p.offsetParent == document.body && p.style.position == 'absolute') {
-          break;
-        }
+      var t = 0,
+        l = 0,
+        p = this;
+      while (p) {
+        t += parseInt(p.offsetTop);
+        l += parseInt(p.offsetLeft);
         p = p.offsetParent;
       }
-      var result = [l, t];
-      result.left = l;
-      result.top = t;
-      return result;
+      if (this.getBoundingClientRect) {
+        return {top: t, left: this.getBoundingClientRect().left};
+      } else {
+        return {top: t, left: l};
+      }
     },
     getDimensions: function () {
       var ow, oh;
@@ -368,10 +404,7 @@ window.$K = (function () {
           s.visibility = ov;
         }
       }
-      var result = [ow, oh];
-      result.width = ow;
-      result.height = oh;
-      return result;
+      return {width: ow, height: oh};
     },
     getOffsetParent: function () {
       var e = this.offsetParent;
@@ -382,6 +415,36 @@ window.$K = (function () {
         }
       }
       return GElement(e);
+    },
+    getCaretPosition: function () {
+      if (document.selection) {
+        var range = document.selection.createRange(),
+          textLength = range.text.length;
+        range.moveStart('character', -this.value.length);
+        var caretAt = range.text.length;
+        return {
+          start: caretAt,
+          end: caretAt + textLength
+        };
+      } else if (this.selectionStart || this.selectionStart == '0') {
+        return {
+          start: this.selectionStart,
+          end: this.selectionEnd
+        };
+      }
+    },
+    setCaretPosition: function (start, length) {
+      if (this.setSelectionRange) {
+        this.focus();
+        this.setSelectionRange(start, start + length);
+      } else if (this.createTextRange) {
+        var range = this.createTextRange();
+        range.collapse(true);
+        range.moveEnd('character', start + length);
+        range.moveStart('character', start);
+        range.select();
+      }
+      return this;
     },
     getStyle: function (s) {
       s = (s == 'float' && this.currentStyle) ? 'styleFloat' : s;
@@ -753,6 +816,56 @@ window.$K = (function () {
       this.tooltip.show(this, value);
       return this;
     },
+    msgBox: function (value, className, autohide) {
+      var parent,
+        tag = this.tagName.toLowerCase();
+      if (tag == 'body') {
+        if ($E('body_msg_div')) {
+          parent = $E('body_msg_div');
+        } else {
+          parent = document.createElement('div');
+          parent.id = 'body_msg_div';
+          parent.style.position = 'fixed';
+          parent.style.right = '10px';
+          parent.style.top = '10px';
+          document.body.appendChild(parent);
+        }
+      } else {
+        parent = this;
+      }
+      if (parent) {
+        if (value && value != '') {
+          var div = document.createElement('div');
+          div.innerHTML = value;
+          div.className = 'alert ' + (className || 'message');
+          var span = document.createElement('span');
+          span.innerHTML = '&times;';
+          span.className = 'closebtn';
+          div.appendChild(span);
+          parent.appendChild(div);
+        }
+        forEach(parent.getElementsByClassName('closebtn'), function () {
+          if (this.onclick === null) {
+            var span = this;
+            span.onclick = function () {
+              var parent = this.parentNode;
+              parent.style.opacity = "0";
+              if (this.timer) {
+                clearTimeout(this.timer);
+              }
+              setTimeout(function () {
+                parent.remove();
+              }, 600);
+            };
+            if (typeof autohide === 'undefined' || autohide === true) {
+              span.timer = setTimeout(function () {
+                span.click();
+              }, 3000);
+            }
+          }
+        });
+      }
+    },
     valid: function (className) {
       if (this.ret) {
         if (this.ret.hasClass('validationResult')) {
@@ -768,8 +881,13 @@ window.$K = (function () {
     },
     invalid: function (value, className) {
       if (!this.ret) {
-        if (typeof this.result === 'string' && this.result !== '' && $E(this.result)) {
-          this.ret = $G(this.result);
+        if (
+          typeof this.dataset !== 'undefined' &&
+          typeof this.dataset.result === 'string' &&
+          this.dataset.result !== '' &&
+          $E(this.dataset.result)
+          ) {
+          this.ret = $G(this.dataset.result);
         } else {
           var id = this.id || this.name;
           if ($E('result_' + id)) {
@@ -888,11 +1006,7 @@ window.$K = (function () {
         }
         if (option.cache == false) {
           var match = /\?/;
-          if (match.test(url)) {
-            url = url + '&timestamp=' + new Date().getTime();
-          } else {
-            url = url + '?timestamp=' + new Date().getTime();
-          }
+          url += (match.test(url) ? '&' : '?') + new Date().getTime();
         }
         this._xhr.open(option.method, url, option.asynchronous);
         if (option.method == 'post') {
@@ -912,9 +1026,7 @@ window.$K = (function () {
             if (self._xhr.status == 200 && !self._abort && Object.isFunction(callback)) {
               self.responseText = self._xhr.responseText;
               self.responseXML = self._xhr.responseXML;
-              if (callback) {
-                callback(self);
-              }
+              callback(self);
             } else {
               option.onError(self);
             }
@@ -940,12 +1052,12 @@ window.$K = (function () {
       }
       return this;
     },
-    autoupdate: function (url, interval, getrequest, callback) {
+    autoupdate: function (url, interval, getRequest, callback) {
       this._xhr = this.xhr();
       this.interval = interval * 1000;
       if (!Object.isNull(this._xhr)) {
         this.url = url;
-        this.getrequest = getrequest;
+        this.getRequest = getRequest;
         this.callback = callback;
         this._abort = false;
         this._getupdate();
@@ -957,21 +1069,17 @@ window.$K = (function () {
         var parameters = null;
         var url = this.url;
         var option = this.options;
-        if (Object.isFunction(this.getrequest)) {
+        if (Object.isFunction(this.getRequest)) {
           if (option.method == 'get') {
-            url += '?' + this.getrequest();
+            url += '?' + this.getRequest();
           } else {
-            parameters = this.getrequest();
+            parameters = this.getRequest();
           }
         }
         parameters = (option.method == 'post' && parameters == null) ? '' : parameters;
         if (option.cache == false) {
           var match = /\?/;
-          if (match.test(url)) {
-            url = url + '&timestamp=' + new Date().getTime();
-          } else {
-            url = url + '?timestamp=' + new Date().getTime();
-          }
+          url += (match.test(url) ? '&' : '?') + new Date().getTime();
         }
         var xhr = this._xhr;
         var temp = this;
@@ -983,9 +1091,11 @@ window.$K = (function () {
             xhr.setRequestHeader('Content-Type', option.contentType + '; charset=' + option.encoding);
           }
         }
+        temp.showLoading();
         xhr.send(parameters);
         xhr.onreadystatechange = function () {
           if (xhr.readyState == 4 && xhr.status == 200) {
+            temp.hideLoading();
             if (temp.callback) {
               temp.callback(xhr);
             }
@@ -1111,7 +1221,8 @@ window.$K = (function () {
           if (val == '') {
             this.addClass('required');
             if (e) {
-              this.invalid(data.title !== '' ? data.title : trans('Please fill in'));
+              var placeholder = this.placeholder;
+              this.invalid(data.title !== '' ? data.title : trans('Please fill in') + (placeholder == '' ? '' : ' ' + placeholder));
             }
           } else {
             this.reset();
@@ -1125,7 +1236,7 @@ window.$K = (function () {
         }
       };
       var _doFileChanged = function () {
-        this.text.value = this.value;
+        this.display.value = this.value;
         if (this.files) {
           var preview = $E(this.get('data-preview'));
           if (preview) {
@@ -1154,7 +1265,16 @@ window.$K = (function () {
         obj.required = this.get('required');
         obj.disabled = this.get('disabled') !== null;
         obj.maxlength = null;
-        obj.result = this.get('data-result');
+        obj.dataset = this.dataset;
+        if (typeof obj.dataset == 'undefined') {
+          obj.dataset = {};
+          forEach(this.attributes, function () {
+            var hs = this.name.match(/^data-(.+)/);
+            if (hs) {
+              obj.dataset[hs[0]] = this.value;
+            }
+          });
+        }
         if (obj.tagName == 'textarea') {
           obj.maxlength = this.get('maxlength');
           if (obj.maxlength !== null) {
@@ -1180,13 +1300,13 @@ window.$K = (function () {
         }
         var autofocus = this.get('autofocus');
         var text = this;
-        if (obj.type == 'date') {
+        if (obj.type == 'date' || obj.type == 'time') {
           var o = {
             'type': 'hidden',
             'name': this.name,
             'id': this.id
           };
-          var txt_date = frm.create('input', o);
+          var hidden = $G(text.parentNode).create('input', o);
           text = $G().create('input', {
             'type': 'text'
           });
@@ -1195,30 +1315,43 @@ window.$K = (function () {
           }
           if (obj.disabled) {
             text.disabled = true;
-            txt_date.disabled = true;
+            hidden.disabled = true;
           }
           text.className = this.className;
-          var calendar = new GCalendar(text, function () {
-            txt_date.value = this.getDateFormat('y-m-d');
-            txt_date.callEvent('change');
-          });
-          txt_date.calendar = calendar;
-          if (obj.min) {
-            calendar.minDate(obj.min);
-          }
-          if (obj.max) {
-            calendar.maxDate(obj.max);
-          }
-          txt_date.value = this.value;
-          window.setInterval(function () {
-            if (txt_date.value != calendar.oldDate) {
-              calendar.oldDate = txt_date.value;
-              calendar.setDate(txt_date.value);
+          var src;
+          if (obj.type == 'time') {
+            src = new GTime(text, function () {
+              hidden.value = this.getTime();
+              hidden.callEvent('change');
+            });
+          } else {
+            src = new GCalendar(text, function () {
+              hidden.value = this.getDateFormat('y-m-d');
+              hidden.calendar = this;
+              hidden.callEvent('change');
+            });
+            if (obj.min) {
+              src.minDate(obj.min);
             }
-            if (txt_date.disabled != text.disabled) {
-              text.disabled = txt_date.disabled ? true : false;
+            if (obj.max) {
+              src.maxDate(obj.max);
+            }
+          }
+          hidden.value = this.value;
+          window.setInterval(function () {
+            if (hidden.value != src.old) {
+              src.old = hidden.value;
+              if (obj.type == 'time') {
+                src.setTime(hidden.value);
+              } else {
+                src.setDate(hidden.value);
+              }
+            }
+            if (hidden.disabled != text.disabled) {
+              text.disabled = hidden.disabled ? true : false;
             }
           }, 500);
+          hidden.display = text;
           this.replace(text);
         } else if (obj.type == 'number' || obj.type == 'email' || obj.type == 'url' || obj.type == 'color' || obj.type == 'currency') {
           var o = {
@@ -1264,7 +1397,7 @@ window.$K = (function () {
             text = $G(p).create('input', {'type': 'text'});
             text.disabled = true;
             text.placeholder = this.placeholder;
-            this.text = text;
+            this.display = text;
             this.style.zIndex = text.style.zIndex + 1;
           }
         }
@@ -1272,6 +1405,9 @@ window.$K = (function () {
           text.addEvent('focus', function () {
             this.select();
           });
+        }
+        if (obj.type == 'number' || obj.type == 'email' || obj.type == 'url' || obj.type == 'color' || obj.type == 'currency') {
+          text.placeholder = this.placeholder;
         }
         obj.element = text;
         text.data = obj;
@@ -1307,7 +1443,11 @@ window.$K = (function () {
             obj.pattern = /^((transparent)|(\#[0-9a-fA-F]{6,6}))$/i;
           }
         }
-        text.result = obj.result;
+        if (typeof obj.dataset !== 'undefined') {
+          for (var prop in obj.dataset) {
+            text.setAttribute('data-' + prop, obj.dataset[prop]);
+          }
+        }
         if (obj.pattern !== null || obj.type == 'number') {
           text.addEvent('change', _docheck);
         }
@@ -1343,23 +1483,22 @@ window.$K = (function () {
           forEach(elements, function () {
             var title, val = this.element.value;
             if (this.required !== null && val == '') {
-              title = this.title !== '' ? this.title : trans('Please fill in');
+              var placeholder = this.element.placeholder;
+              title = this.title !== '' ? this.title : trans('Please fill in') + (placeholder == '' ? '' : ' ' + placeholder);
               alert(title);
               this.element.addClass('required').highlight().focus();
               ret = false;
               return true;
-            } else if (this.pattern !== null && val !== '') {
-              if (this.pattern.test(val)) {
-                this.element.valid();
-              } else {
-                title = this.title !== '' ? this.title : trans('Invalid data');
-                this.element.invalid(title);
-                alert(title);
-                this.element.highlight().focus();
-                this.element.select();
-                ret = false;
-                return true;
-              }
+            } else if (this.pattern !== null && val !== '' && !this.pattern.test(val)) {
+              title = this.title !== '' ? this.title : trans('Invalid data');
+              this.element.invalid(title);
+              alert(title);
+              this.element.highlight().focus();
+              this.element.select();
+              ret = false;
+              return true;
+            } else {
+              this.element.reset();
             }
           });
           if (ret && Object.isFunction(temp.callback)) {
@@ -1579,7 +1718,7 @@ window.$K = (function () {
         });
         self.div.style.display = 'block';
         var dm = self.body.getDimensions();
-        var hOffset = dm.height - self.body.getClientHeight() + parseInt(self.body.getStyle('marginTop')) + parseInt(self.body.getStyle('marginBottom')) + 20;
+        var hOffset = dm.height - self.body.getClientHeight() + parseInt(self.body.getStyle('marginTop')) + parseInt(self.body.getStyle('marginBottom')) + 40;
         var wOffset = dm.width - self.body.getClientWidth() + parseInt(self.body.getStyle('marginLeft')) + parseInt(self.body.getStyle('marginRight')) + 20;
         var h = document.viewport.getHeight() - hOffset;
         if (dm.height > h) {
@@ -1770,310 +1909,6 @@ window.$K = (function () {
       this.timer = window.setTimeout(this.step.bind(this), this.options.speed);
     }
   });
-  window.HScroll = GClass.create();
-  HScroll.prototype = Object.extend(new GFx(), {
-    initialize: function (container, scroller) {
-      this.options = {
-        speed: 30,
-        duration: 5,
-        arrowTop: 'arrowTop',
-        arrowBottom: 'arrowBottom'
-      };
-      var temp = this;
-      this.scroller = $G(scroller);
-      this.containerHeight = $G(container).getDimensions().height;
-    },
-    play: function (options) {
-      for (var property in options) {
-        this.options[property] = options[property];
-      }
-      var temp = this;
-      var arrowTop = $G(this.options.arrowTop);
-      arrowTop.addEvent('mouseover', function () {
-        temp.rel = 'play';
-        temp.pos = 'down';
-      });
-      arrowTop.addEvent('mouseout', function () {
-        temp.rel = 'pause';
-      });
-      var arrowBottom = $G(this.options.arrowBottom);
-      arrowBottom.addEvent('mouseover', function () {
-        temp.rel = 'play';
-        temp.pos = 'up';
-      });
-      arrowBottom.addEvent('mouseout', function () {
-        temp.rel = 'pause';
-      });
-      this.scrollerTop = 0;
-      this._run();
-      return this;
-    },
-    step: function () {
-      if (this.rel == 'play') {
-        if (this.pos == 'up' && this.scrollerTop < 0) {
-          this.scrollerTop = this.scrollerTop + this.options.duration;
-          this.scroller.style.top = this.scrollerTop + 'px';
-        } else if (this.pos == 'down' && this.scroller.getHeight() + this.scrollerTop > this.containerHeight) {
-          this.scrollerTop = this.scrollerTop - this.options.duration;
-          this.scroller.style.top = this.scrollerTop + 'px';
-        }
-      }
-      this.timer = window.setTimeout(this.step.bind(this), this.options.speed);
-    }
-  });
-  window.VScroll = GClass.create();
-  VScroll.prototype = Object.extend(new GFx(), {
-    initialize: function (container, scroller, options) {
-      this.options = {
-        speed: 30,
-        duration: 5,
-        className: 'item',
-        arrowLeft: 'arrowLeft',
-        arrowRight: 'arrowRight'
-      };
-      for (var property in options) {
-        this.options[property] = options[property];
-      }
-      var temp = this;
-      var arrowLeft = $G(this.options.arrowLeft);
-      arrowLeft.addEvent('mouseover', function () {
-        temp.rel = 'play';
-        temp.pos = 'left';
-      });
-      arrowLeft.addEvent('mouseout', function () {
-        temp.rel = 'pause';
-      });
-      var arrowRight = $G(this.options.arrowRight);
-      arrowRight.addEvent('mouseover', function () {
-        temp.rel = 'play';
-        temp.pos = 'right';
-      });
-      arrowRight.addEvent('mouseout', function () {
-        temp.rel = 'pause';
-      });
-      this.scroller = $G(scroller);
-      var a, w = 0;
-      forEach(this.scroller.childNodes, function () {
-        if (this.nodeType == 1) {
-          a = $G(this);
-          a.className = temp.options.className;
-          w += a.getWidth() + parseInt(a.getStyle('marginLeft')) + parseInt(a.getStyle('marginRight'));
-        }
-      });
-      this.scroller.style.width = w + 'px';
-      this.scroller.style.position = 'absolute';
-      this.container = $G(container);
-      this.containerWidth = this.container.getWidth();
-      this.rel = 'pause';
-    },
-    play: function () {
-      this.scrollerWidth = this.scroller.getWidth();
-      this.scrollerLeft = 0;
-      this._run();
-      return this;
-    },
-    step: function () {
-      if (this.rel == 'play') {
-        if (this.pos == 'left') {
-          this.scrollerLeft = Math.min(0, this.scrollerLeft + this.options.duration);
-          this.scroller.style.left = this.scrollerLeft + 'px';
-        } else if (this.pos == 'right') {
-          this.scrollerLeft = Math.max(this.containerWidth - this.scrollerWidth, this.scrollerLeft - this.options.duration);
-          this.scroller.style.left = this.scrollerLeft + 'px';
-        }
-      } else if (this.rel == 'move') {
-        if (this.scrollTo < this.scrollerLeft && this.scrollerWidth + this.scrollerLeft > this.containerWidth) {
-          this.scrollerLeft = this.scrollerLeft - this.options.duration;
-          this.scrollerLeft = this.scrollerLeft < this.scrollTo ? this.scrollTo : this.scrollerLeft;
-          this.scroller.style.left = this.scrollerLeft + 'px';
-        } else if (this.scrollTo > this.scrollerLeft && this.scrollerLeft < 0) {
-          this.scrollerLeft = this.scrollerLeft + this.options.duration;
-          this.scrollerLeft = this.scrollerLeft > this.scrollTo ? this.scrollTo : this.scrollerLeft;
-          this.scroller.style.left = this.scrollerLeft + 'px';
-        } else {
-          this.rel = 'pause';
-        }
-      }
-      this.timer = window.setTimeout(this.step.bind(this), this.options.speed);
-    },
-    MoveTo: function (e) {
-      if ($E(e)) {
-        e = $G(e);
-        this.scrollTo = this.scroller.getLeft() - ((e.getLeft() + e.getWidth()) - this.containerWidth + 5);
-      } else {
-        this.scrollTo = 0;
-      }
-      this.rel = 'move';
-      return this;
-    }
-  });
-  window.GSlide = GClass.create();
-  GSlide.prototype = Object.extend(new GFx(), {
-    initialize: function () {
-      this.options = {
-        speed: 30,
-        duration: 1,
-        from: 0,
-        to: 0,
-        onSlide: $K.emptyFunction
-      };
-    },
-    play: function (options) {
-      for (var property in options) {
-        this.options[property] = options[property];
-      }
-      this.Pos = this.options.from;
-      this._run();
-      return this;
-    },
-    step: function () {
-      var option = this.options;
-      if (option.to > option.from && this.Pos < option.to) {
-        this.Pos = this.Pos + option.duration;
-        this.Pos = this.Pos > option.to ? option.to : this.Pos;
-        option.onSlide.call(this);
-        this.timer = window.setTimeout(this.step.bind(this), option.speed);
-      } else if (option.to < option.from && this.Pos > option.to) {
-        this.Pos = this.Pos - option.duration;
-        this.Pos = this.Pos < option.to ? option.to : this.Pos;
-        option.onSlide.call(this);
-        this.timer = window.setTimeout(this.step.bind(this), option.speed);
-      }
-    }
-  });
-  var GCrossFade = GClass.create();
-  GCrossFade.prototype = Object.extend(new GFx(), {
-    initialize: function (elem, options) {
-      this.options = {
-        speed: 10,
-        loop: true,
-        auto: true,
-        onChanged: $K.emptyFunction
-      };
-      for (var property in options) {
-        this.options[property] = options[property];
-      }
-      this.Slide = $G(elem);
-      var size = this.Slide.getDimensions();
-      this.width = size.width;
-      this.height = size.height;
-      var img = document.createElement('img');
-      img.style.position = 'absolute';
-      img.style.left = '-10000px';
-      this.Slide.appendChild(img);
-      this.img1 = $G(img);
-      img = document.createElement('img');
-      img.style.position = 'absolute';
-      img.style.left = '-10000px';
-      this.Slide.appendChild(img);
-      this.img2 = $G(img);
-      this.currImg = this.img2;
-      this.fader = 0;
-      this.action = 'stop';
-    },
-    next: function (val) {
-      window.clearTimeout(this.fader);
-      var pos = this.Pos + val;
-      pos = pos >= this.pictures.length ? this.pictures.length - 1 : pos;
-      pos = pos < 0 ? 0 : pos;
-      if (pos != this.Pos) {
-        this.show(pos);
-      }
-      return this;
-    },
-    play: function () {
-      this.nextPos = this.Pos + 1;
-      this._run();
-      return this;
-    },
-    step: function () {
-      if (this.options.loop) {
-        this.nextPos = this.nextPos >= this.pictures.length ? 0 : this.nextPos;
-      } else if (this.nextPos >= this.pictures.length) {
-        return;
-      }
-      var temp = this;
-      new preload(this.pictures[this.nextPos], function () {
-        temp.currImg = temp.currImg == temp.img2 ? temp.img1 : temp.img2;
-        var old = temp.currImg == temp.img2 ? temp.img1 : temp.img2;
-        temp._resizeImage(temp.currImg, this);
-        temp.currImg.style.zIndex = 1;
-        old.style.zIndex = 0;
-        new GFade(temp.currImg).play({
-          'onComplete': function () {
-            old.setStyle('opacity', 0);
-            temp.fader = window.setTimeout(temp.step.bind(temp), temp.options.speed * 1000);
-            temp.Pos = temp.nextPos;
-            temp.options.onChanged.call(temp);
-            temp.nextPos++;
-          }
-        });
-      });
-    },
-    show: function (id) {
-      var temp = this;
-      new preload(this.pictures[id], function () {
-        temp.currImg = temp.currImg == temp.img2 ? temp.img1 : temp.img2;
-        var old = temp.currImg == temp.img2 ? temp.img1 : temp.img2;
-        temp._resizeImage(temp.currImg, this);
-        temp.currImg.style.zIndex = 1;
-        old.style.zIndex = 0;
-        new GFade(temp.currImg).play({
-          'onComplete': function () {
-            old.setStyle('opacity', 0);
-            temp.Pos = id;
-            temp.options.onChanged.call(temp);
-          }
-        });
-      });
-      return this;
-    },
-    pictures: function (files) {
-      this.pictures = files.split(',');
-      this.picturesWidth = new Array();
-      this.picturesHeight = new Array();
-      if (this.options.auto) {
-        this.Pos = 0;
-        this.play();
-      } else {
-        this.show(0);
-      }
-      return this;
-    },
-    _resizeImage: function (img, obj) {
-      img.src = obj.src;
-      var w = obj.width;
-      var h = obj.height;
-      var nw, nh;
-      if (w >= h) {
-        if (w > this.width) {
-          nw = this.width;
-          nh = (this.width * h) / w;
-        } else if (h > this.height) {
-          nh = this.height;
-          nw = (this.height * w) / h;
-        } else {
-          nh = h;
-          nw = w;
-        }
-      } else {
-        if (h > this.height) {
-          nh = this.height;
-          nw = (this.height * w) / h;
-        } else if (w > this.width) {
-          nw = this.width;
-          nh = (this.width * h) / w;
-        } else {
-          nh = h;
-          nw = w;
-        }
-      }
-      img.style.width = nw + 'px';
-      img.style.height = nh + 'px';
-      img.style.top = ((this.height - nh) / 2) + 'px';
-      img.style.left = ((this.width - nw) / 2) + 'px';
-    }
-  });
   window.preload = GClass.create();
   preload.prototype = {
     initialize: function (img, onComplete) {
@@ -2252,7 +2087,7 @@ window.$K = (function () {
     },
     validate: function () {
       this.abort();
-      var ret = Object.isFunction(this.validtor) ? this.validtor.call(this) : true;
+      var ret = Object.isFunction(this.validtor) ? this.validtor.call(this.input) : true;
       if (this.form && ret && this.action && ret !== '' && this.action !== '') {
         this.input.addClass('wait');
         var temp = this;
@@ -2297,6 +2132,16 @@ window.$K = (function () {
       this.input.set('title', this.title);
       this.input.reset();
     }
+  };
+  Number.prototype.format = function (decimals, dec_point, thousands_sep) {
+    decimals = isNaN(decimals = Math.abs(decimals)) ? 2 : decimals;
+    dec_point = dec_point == undefined ? "." : dec_point;
+    thousands_sep = thousands_sep == undefined ? "," : thousands_sep;
+    var n = this,
+      s = n < 0 ? "-" : "",
+      i = String(parseInt(n = Math.abs(Number(n) || 0).toFixed(decimals))),
+      j = (j = i.length) > 3 ? j % 3 : 0;
+    return s + (j ? i.substr(0, j) + thousands_sep : "") + i.substr(j).replace(/(\d{3})(?=\d)/g, "$1" + thousands_sep) + (decimals ? dec_point + Math.abs(n - i).toFixed(decimals).slice(2) : "");
   };
   String.prototype.hexToRgb = function (a) {
     var h = this.match(new RegExp('^[#]{0,1}([\\w]{1,2})([\\w]{1,2})([\\w]{1,2})$'));
@@ -2677,37 +2522,165 @@ window.$K = (function () {
       new GDrag(this.dragObj, this.dragObj, o);
     }
   };
-  window.GAutoSave = GClass.create();
-  GAutoSave.prototype = {
-    initialize: function (url, onchanged, callback, wait) {
-      this.timer = 0;
-      this.req = new GAjax();
-      this.url = url;
-      this.onchanged = onchanged;
-      this.callback = callback;
-      this.wait = wait || 1000;
-    },
-    initLoading: function (loading, center) {
-      this.req.initLoading(loading, center);
-      return this;
-    },
-    add: function (id, evt, callback) {
+  window.GTime = GClass.create();
+  GTime.prototype = {
+    initialize: function (id, onchanged) {
+      this.input = $G(id);
+      this.input.addClass('gtime');
+      this.onchanged = onchanged || $K.emptyFunction;
+      this.firstKey = null;
+      this.highlight = '';
+      this.onchanged.call(this);
       var self = this;
-      var _event = function () {
-        window.clearTimeout(self.timer);
-        if (Object.isFunction(callback)) {
-          callback.call(this);
-        }
-        var temp = this;
-        self.timer = window.setTimeout(function () {
-          var q = self.onchanged.call(temp);
-          if (q != '') {
-            self.req.send(self.url, q, self.callback);
-          }
-        }, self.wait);
+      var doSetCaret = function () {
+        var caret = self.input.getCaretPosition();
+        self._setCaret(caret.start);
+        self.firstKey = null;
       };
-      $G(id).addEvent(evt, _event);
+      this.input.addEvent('focus', function () {
+        window.setTimeout(doSetCaret, 1);
+      });
+      this.input.addEvent('click', doSetCaret);
+      this.input.addEvent('blur', function () {
+        self.setTime(this.value);
+      });
+      this.input.addEvent('paste', function (e) {
+        GEvent.stop(e);
+        return false;
+      });
+      this.input.addEvent('keydown', function (e) {
+        var key = GEvent.keyCode(e);
+        var stop = false;
+        if (key == 8) {
+          self.input.value = '--:--';
+          self._setCaret(0);
+          self.firstKey = null;
+          stop = true;
+        } else if (key == 37) {
+          self._setCaret(0);
+          self.firstKey = null;
+          stop = true;
+        } else if (key == 38) {
+          var times = self.input.value.split(':');
+          var caret = 0;
+          if (self.highlight == 'hour') {
+            var t = Math.min(23, floatval(times[0]) + 1);
+            if (t < 10) {
+              times[0] = '0' + t;
+            } else {
+              times[0] = t;
+            }
+          } else if (self.highlight == 'minute') {
+            var t = Math.min(59, floatval(times[1]) + 1);
+            if (t < 10) {
+              times[1] = '0' + t;
+            } else {
+              times[1] = t;
+            }
+            caret = 3;
+          }
+          self.input.value = times[0] + ':' + times[1];
+          self._setCaret(caret);
+          stop = true;
+        } else if (key == 39) {
+          self._setCaret(3);
+          self.firstKey = null;
+          stop = true;
+        } else if (key == 40) {
+          var times = self.input.value.split(':');
+          var caret = 0;
+          if (self.highlight == 'hour') {
+            var t = Math.max(0, floatval(times[0]) - 1);
+            if (t < 10) {
+              times[0] = '0' + t;
+            } else {
+              times[0] = t;
+            }
+          } else if (self.highlight == 'minute') {
+            var t = Math.max(0, floatval(times[1]) - 1);
+            if (t < 10) {
+              times[1] = '0' + t;
+            } else {
+              times[1] = t;
+            }
+            caret = 3;
+          }
+          self.input.value = times[0] + ':' + times[1];
+          self._setCaret(caret);
+          stop = true;
+        }
+        if (stop) {
+          GEvent.stop(e);
+          return false;
+        }
+      });
+      this.input.addEvent('keypress', function (e) {
+        var key = GEvent.keyCode(e);
+        if (key == 9) {
+          return true;
+        } else if (key >= 48 && key <= 57 && !GEvent.isCtrlKey(e)) {
+          var c = floatval(String.fromCharCode(key));
+          var times = self.input.value.split(':');
+          var caret = 0;
+          if (self.highlight == 'hour') {
+            if (self.firstKey == null) {
+              times[0] = '0' + c;
+              if (c < 3) {
+                self.firstKey = c;
+                caret = 0;
+              } else {
+                caret = 3;
+                self.firstKey = null;
+              }
+            } else {
+              times[0] = String(self.firstKey) + c;
+              caret = 3;
+              self.firstKey = null;
+            }
+          } else if (self.highlight == 'minute') {
+            if (self.firstKey == null) {
+              times[1] = '0' + c;
+              if (c < 6) {
+                self.firstKey = c;
+              }
+            } else {
+              times[1] = String(self.firstKey) + c;
+              self.firstKey = null;
+            }
+            caret = 3;
+          }
+          self.input.value = times[0] + ':' + times[1];
+          self._setCaret(caret);
+        }
+        GEvent.stop(e);
+        return false;
+      });
+    },
+    getTime: function () {
+      return this.input.value == '--:--' ? '' : this.input.value + ':00';
+    },
+    setTime: function (time) {
+      this.input.value = this._toTime(time);
+      this.onchanged.call(this);
       return this;
+    },
+    _toTime: function (time) {
+      time = /([0-9]{1,2})(:([0-9]{1,2}))?(:([0-9]{1,2}))?/.exec(time);
+      if (time) {
+        var h = Math.min(23, floatval(time[1]));
+        var m = Math.min(59, floatval(time[3]));
+        return  (h < 10 ? '0' + h : h) + ':' + (m < 10 ? '0' + m : m);
+      }
+      return '--:--';
+    },
+    _setCaret: function (pos) {
+      if (pos < 3) {
+        this.input.setCaretPosition(0, 2);
+        this.highlight = 'hour';
+      } else {
+        this.input.setCaretPosition(3, 2);
+        this.highlight = 'minute';
+      }
     }
   };
   window.GCalendar = GClass.create();
@@ -2721,7 +2694,7 @@ window.$K = (function () {
       this.xdate = null;
       this.mode = 0;
       this.format = 'd M Y';
-      this.date = new Date();
+      this.date = null;
       this.cdate = new Date();
       if (!$E('gcalendar_div')) {
         var div = document.createElement('div');
@@ -2732,11 +2705,11 @@ window.$K = (function () {
       this.calendar.style.position = 'absolute';
       this.calendar.style.display = 'none';
       this.calendar.style.zIndex = 1001;
-      this._datechanged();
+      this._dochanged();
       var self = this;
       this.input.addEvent('click', function (e) {
         self.mode = 0;
-        self.cdate.setTime(self.date.valueOf());
+        self.cdate.setTime(self.date ? self.date.valueOf() : new Date());
         self._draw();
         GEvent.stop(e);
       });
@@ -2764,20 +2737,28 @@ window.$K = (function () {
             self._draw();
           }
           GEvent.stop(e);
+        } else if (key == 8) {
+          self.setDate(null);
+          GEvent.stop(e);
         }
       });
       $G(document.body).addEvent('click', function () {
         self.calendar.style.display = 'none';
       });
     },
-    _datechanged: function () {
-      if (this.xdate && this.date > this.xdate) {
+    _dochanged: function () {
+      if (this.xdate && this.date && this.date > this.xdate) {
         this.date.setTime(this.xdate.valueOf());
-      } else if (this.mdate && this.date < this.mdate) {
+      } else if (this.mdate && this.date && this.date < this.mdate) {
         this.date.setTime(this.mdate.valueOf());
       }
-      this.cdate.setTime(this.date.valueOf());
-      this.input.value = this.date.format(this.format);
+      if (this.date) {
+        this.cdate.setTime(this.date.valueOf());
+        this.input.value = this.date.format(this.format);
+      } else {
+        this.cdate.setTime(new Date());
+        this.input.value = '';
+      }
       this.onchanged.call(this);
     },
     _toogle: function (e) {
@@ -2785,7 +2766,11 @@ window.$K = (function () {
         this.calendar.style.display = 'none';
       } else {
         this.mode = 0;
-        this.cdate.setTime(this.date.valueOf());
+        if (this.date) {
+          this.cdate.setTime(this.date.valueOf());
+        } else {
+          this.cdate.setTime(new Date());
+        }
         this._draw();
       }
       GEvent.stop(e);
@@ -2838,9 +2823,9 @@ window.$K = (function () {
       var today_month = today.getMonth() + 1;
       var today_year = today.getFullYear();
       var today_date = today.getDate();
-      var sel_month = this.date.getMonth() + 1;
-      var sel_year = this.date.getFullYear();
-      var sel_date = this.date.getDate();
+      var sel_month = this.date ? this.date.getMonth() + 1 : today_month;
+      var sel_year = this.date ? this.date.getFullYear() : today_year;
+      var sel_date = this.date ? this.date.getDate() : today_date;
       var r = 0;
       var c = 0;
       var bg, row, cell;
@@ -2979,8 +2964,11 @@ window.$K = (function () {
           }
           if (canclick) {
             $G(cell).addEvent('click', function (e) {
+              if (self.date === null) {
+                self.date = new Date();
+              }
               self.date.setTime(this.oDate.valueOf());
-              self._datechanged();
+              self._dochanged();
               var input = $E(self.input);
               input.focus();
               input.select();
@@ -2999,12 +2987,10 @@ window.$K = (function () {
           pointer++;
         }
       }
-      var vpo = this.input.viewportOffset();
-      var t = vpo.top + this.input.getHeight() + 5;
-      var dm = this.calendar.getDimensions();
-      var ch = document.viewport.getHeight();
-      var ct = document.viewport.getscrollTop();
-      if ((t + dm.height + 5) >= (ch + ct)) {
+      var vpo = this.input.viewportOffset(),
+        t = vpo.top + this.input.getHeight() + 5,
+        dm = this.calendar.getDimensions();
+      if ((t + dm.height + 5) >= (document.viewport.getHeight() + document.viewport.getscrollTop())) {
         this.calendar.style.top = (vpo.top - dm.height - 5) + 'px';
       } else {
         this.calendar.style.top = t + 'px';
@@ -3026,45 +3012,64 @@ window.$K = (function () {
       GEvent.stop(e);
     },
     moveDate: function (day) {
+      if (this.date === null) {
+        this.date = new Date();
+      }
       this.date.setDate(this.date.getDate() + day);
-      this._datechanged();
+      this._dochanged();
       return this;
     },
     moveMonth: function (month) {
+      if (this.date === null) {
+        this.date = new Date();
+      }
       this.date.setMonth(this.date.getMonth() + month);
-      this._datechanged();
+      this._dochanged();
       return this;
     },
     moveYear: function (year) {
+      if (this.date === null) {
+        this.date = new Date();
+      }
       this.date.setFullYear(this.date.getFullYear() + year);
-      this._datechanged();
+      this._dochanged();
       return this;
     },
     setFormat: function (value) {
       this.format = value;
-      this._datechanged();
+      this._dochanged();
       return this;
     },
     setDate: function (date) {
-      this.date = this._toDate(date);
-      this._datechanged();
+      if (date === '' || date === null) {
+        this.date = null;
+      } else {
+        this.date = this._toDate(date);
+      }
+      this._dochanged();
       return this;
     },
     getDate: function () {
-      var d = new Date();
-      d.setTime(this.date.valueOf());
-      return d;
+      if (this.date) {
+        var d = new Date();
+        d.setTime(this.date.valueOf());
+        return d;
+      }
+      return null;
     },
     getDateFormat: function (format) {
-      format = format || this.format;
-      return this.getDate().format(format);
+      if (this.date) {
+        format = format || this.format;
+        return this.getDate().format(format);
+      }
+      return null;
     },
     minDate: function (date) {
       if (Object.isNull(date)) {
         if (this.mdate == null) {
           this.mdate = new Date();
         }
-        this.mdate.setTime(this.date.valueOf());
+        this.mdate.setTime(this.date ? this.date.valueOf() : new Date());
       } else {
         this.mdate = this._toDate(date);
       }
@@ -3075,7 +3080,7 @@ window.$K = (function () {
         if (this.xdate == null) {
           this.xdate = new Date();
         }
-        this.xdate.setTime(this.date.valueOf());
+        this.xdate.setTime(this.date ? this.date.valueOf() : new Date());
       } else {
         this.xdate = this._toDate(date);
       }
@@ -3214,9 +3219,8 @@ window.$K = (function () {
       };
       var _validateColor = function (e) {
         var key = GEvent.keyCode(e);
-        var ctrl = GEvent.isCtrlKey(e);
-        if (!((key > 36 && key < 41) || key == 8 || key == 9 || ctrl)) {
-          var c = new String.fromCharCode(key);
+        if (!((key > 36 && key < 41) || key == 8 || key == 9 || GEvent.isCtrlKey(e))) {
+          var c = String.fromCharCode(key);
           var numcheck = /[\#0-9a-fA-F]/;
           if (!numcheck.test(c)) {
             GEvent.stop(e);

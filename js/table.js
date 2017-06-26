@@ -1,4 +1,4 @@
-/*
+/**
  * GTable
  * Javascript data table for Kotchasan Framework
  *
@@ -122,20 +122,28 @@
             patt = /^([a-z_\-]+)_([0-9]+)(_([0-9]+))?$/;
           if (temp.options.actionConfirm) {
             var fn = window[temp.options.actionConfirm];
-            if (Object.isFunction(fn)) {
-              hs = patt.exec(this.id);
+            hs = patt.exec(this.id);
+            if (hs && Object.isFunction(fn)) {
               var t = this.getText();
               t = t ? t.strip_tags() : null;
               action = fn(t, hs[1], hs[2], hs[4]);
+            } else {
+              action = 'action=' + this.id;
             }
           } else {
             hs = patt.exec(this.id);
-            if (hs[1] == 'delete') {
-              if (confirm(trans('You want to delete ?'))) {
-                action = 'action=delete&id=' + hs[2];
+            if (hs) {
+              if (hs[1] == 'delete') {
+                if (confirm(trans('You want to XXX ?').replace(/XXX/, trans('delete')))) {
+                  action = 'action=delete&id=' + hs[2];
+                }
+              } else if (hs[4]) {
+                action = 'action=' + hs[1] + '_' + hs[2] + '&id=' + hs[4];
+              } else {
+                action = 'action=' + hs[1] + '&id=' + hs[2];
               }
             } else {
-              action = 'action=' + hs[1] + '&id=' + hs[2];
+              action = 'action=' + this.id;
             }
           }
           if (action != '') {
@@ -245,7 +253,7 @@
           if (temp.options.onBeforeDelete) {
             ret = temp.options.onBeforeDelete.call(temp, tr);
           } else if (tbody.elems('tr').length > 1) {
-            ret = confirm(trans('You want to delete ?'));
+            ret = confirm(trans('You want to XXX ?').replace(/XXX/, trans('delete')));
           }
           if (ret) {
             if (tbody.elems('tr').length > 1) {
@@ -259,7 +267,7 @@
           }
         } else if (hs = a_patt.exec(c)) {
           var action = '';
-          if (hs[1] == 'delete' && confirm(trans('You want to delete ?'))) {
+          if (hs[1] == 'delete' && confirm(trans('You want to XXX ?').replace(/XXX/, trans('delete')))) {
             action = 'action=delete&id=' + hs[2];
           }
           if (action != '' && temp.options.action) {

@@ -1,5 +1,5 @@
 <?php
-/*
+/**
  * @filesource Kotchasan/Validator.php
  * @link http://www.kotchasan.com/
  * @copyright 2016 Goragod.com
@@ -70,7 +70,7 @@ class Validator extends \Kotchasan\KBase
   }
 
   /**
-   * ฟังก์ชั่นสำหรับตรวจสอบความถูกต้องของรหัสบัตรประชาชน
+   * ฟังก์ชั่นสำหรับตรวจสอบความถูกต้องของเลขประชาชน
    *
    * @param string $id ตัวเลข 13 หลัก
    * @return boolean คืนค่า true=ถูกต้อง และ false=ไม่ถูกต้อง

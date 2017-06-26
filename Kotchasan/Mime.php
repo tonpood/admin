@@ -1,5 +1,5 @@
 <?php
-/*
+/**
  * @filesource Kotchasan/Mime.php
  * @link http://www.kotchasan.com/
  * @copyright 2016 Goragod.com
@@ -1050,7 +1050,7 @@ class Mime
    * @assert (array('jpg','gif','png')) [==] "image/jpeg,image/gif,image/png"
    * @return string คืนค่า mimetype ของไฟล์ คั่นแต่ละรายการด้วย , เช่น image/jpeg,image/png,image/gif
    */
-  public static function getEccept($typies)
+  public static function getAccept($typies)
   {
     $mime_types = self::typies();
     $accept = array();

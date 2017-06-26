@@ -1,5 +1,5 @@
 <?php
-/*
+/**
  * load.php
  *
  * @author Goragod Wiriya <admin@goragod.com>
@@ -7,10 +7,6 @@
  * @copyright 2016 Goragod.com
  * @license http://www.kotchasan.com/license/
  */
-/**
- * สำหรับจับเวลาประมวลผลเพจ.
- */
-define('REQUEST_TIME', microtime(true));
 /*
  * Site root
  */

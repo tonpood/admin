@@ -1,5 +1,5 @@
 <?php
-/*
+/**
  * @filesource Kotchasan/DataTable.php
  * @link http://www.kotchasan.com/
  * @copyright 2016 Goragod.com
@@ -10,7 +10,7 @@ namespace Kotchasan;
 
 use \Kotchasan\ArrayTool;
 use \Kotchasan\Language;
-use \Kotchasan\Orm\Recordset;
+use \Kotchasan\Http\Uri;
 
 /**
  * คลาสสำหรับจัดการแสดงผลข้อมูลจาก Model ในรูปแบบตาราง
@@ -30,15 +30,9 @@ class DataTable extends \Kotchasan\KBase
   /**
    * ชื่อ Model ที่ต้องการเรียกข้อมูล
    *
-   * @var string
+   * @var \Kotchasan\Database\QueryBuilder
    */
   private $model;
-  /**
-   * Recordset
-   *
-   * @var \Kotchasan\Orm\Recordset
-   */
-  private $rs;
   /**
    * ข้อมูลทั้งหมดของตารางรูปแบบแอเรย์
    * หากไม่ได้ใช้ตารางเชื่อมต่อกับ Model ให้กำหนดข้อมูลทั้งหมดที่นี่
@@ -204,7 +198,7 @@ class DataTable extends \Kotchasan\KBase
    *
    * @var int
    */
-  public $perPage;
+  public $perPage = 0;
   /**
    * ชื่อคอลัมน์ที่ใช้เรียงลำดับ
    *
@@ -231,6 +225,13 @@ class DataTable extends \Kotchasan\KBase
    */
   private $onCreateButton;
   /**
+   * method เรียกเมื่อต้องการสร้าง footer
+   * คืนค่า tag tr ที่อยู่ภายใน footer
+   *
+   * @var array array($this, methodName)
+   */
+  private $onCreateFooter;
+  /**
    * กำหนดคอลัมน์ หากยอมให้สามารถจัดลำดับตารางด้วยการลากได้
    *
    * @var int
@@ -249,6 +250,12 @@ class DataTable extends \Kotchasan\KBase
    * @var array
    */
   private $javascript = array();
+  /**
+   * Uri ปัจจุบันของหน้าเว็บ
+   *
+   * @var Uri
+   */
+  private $uri;
 
   /**
    * Initial Class
@@ -261,31 +268,42 @@ class DataTable extends \Kotchasan\KBase
     foreach ($param as $key => $value) {
       $this->$key = $value;
     }
-    // รายการต่อหน้า มาจากการเลือกภายในตารง
-    $count = self::$request->request('count')->toInt();
-    if ($count > 0) {
-      $this->perPage = $count;
+    if (empty($this->uri)) {
+      $this->uri = self::$request->getUri();
+    } elseif (is_string($this->uri)) {
+      $this->uri = Uri::createFromUri($this->uri);
+    }
+    // รายการต่อหน้า มาจากการเลือกภายในตาราง
+    if ($this->perPage > 0) {
+      $count = self::$request->globals(array('POST', 'GET'), 'count')->toInt();
+      if ($count > 0) {
+        $this->perPage = $count;
+        $this->uri = $this->uri->withParams(array('count' => $count));
+      }
     }
     // header ของตาราง มาจาก model หรือมาจากข้อมูล หรือ มาจากการกำหนดเอง
     if (isset($this->model)) {
-      // create Recordset
-      $this->rs = new Recordset($this->model);
-      // ฟิลด์ที่กำหนด (หากแตกต่างจาก Model)
-      $first = $this->rs->first($this->fields);
+      // อ่านข้อมูลรายการแรกเพื่อใช้ชื่อฟิลด์เป็นหัวตาราง
+      if (is_string($this->model)) {
+        // model เป็น Recordset, create Recordset
+        $rs = new \Kotchasan\Orm\Recordset($this->model);
+        // แปลง Recordset เป็น QueryBuilder
+        $this->model = $rs->toQueryBuilder();
+      }
+      // อ่านข้อมูลรายการแรก
+      $first = $this->model->copy()->first($this->fields);
       // อ่านคอลัมน์ของตาราง
-      if ($first === false) {
-        if (!empty($this->fields)) {
-          foreach ($this->fields as $field) {
-            if (is_array($field)) {
-              $this->columns[$field[1]] = array('text' => $field[1]);
-            } elseif (preg_match('/(.*?[`\s]+)?([a-z0-9_]+)`?$/i', $field, $match)) {
-              $this->columns[$match[2]] = array('text' => $match[2]);
-            }
-          }
+      if ($first) {
+        foreach ($first as $k => $v) {
+          $this->columns[$k] = array('text' => $k);
         }
-      } else {
-        foreach ($this->rs->getFields() as $k => $v) {
-          $this->columns[$k] = array('text' => $v['name']);
+      } elseif (!empty($this->fields)) {
+        foreach ($this->fields as $field) {
+          if (is_array($field)) {
+            $this->columns[$field[1]] = array('text' => $field[1]);
+          } elseif (preg_match('/(.*?[`\s]+)?([a-z0-9_]+)`?$/i', $field, $match)) {
+            $this->columns[$match[2]] = array('text' => $match[2]);
+          }
         }
       }
     } elseif (isset($this->datas)) {
@@ -314,7 +332,10 @@ class DataTable extends \Kotchasan\KBase
       }
       $this->headers = $headers;
     }
-    $this->sort = self::$request->request('sort', $this->sort)->toString();
+    $this->sort = self::$request->globals(array('POST', 'GET'), 'sort', $this->sort)->toString();
+    if (!empty($this->sort)) {
+      $this->uri = $this->uri->withParams(array('sort' => $this->sort));
+    }
   }
 
   /**
@@ -340,12 +361,14 @@ class DataTable extends \Kotchasan\KBase
     }
     $url_query = array();
     $hidden_fields = array();
-    foreach (self::$request->getQueryParams() as $key => $value) {
-      $value = rawurlencode($value);
-      $url_query[$key] = $key.'='.$value;
-      // แอเรย์เก็บรายการ input ที่ไม่ต้องสร้าง
-      if ($key !== 'search' && $key !== 'count' && $key !== 'page' && $key !== 'action') {
-        $hidden_fields[$key] = '<input type="hidden" name="'.$key.'" value="'.$value.'">';
+    parse_str($this->uri->getQuery(), $query_string);
+    foreach ($query_string as $key => $value) {
+      if ($value != '') {
+        $url_query[$key] = $key.'='.$value;
+        // แอเรย์เก็บรายการ input ที่ไม่ต้องสร้าง
+        if ($key !== 'search' && $key !== 'count' && $key !== 'page' && $key !== 'action') {
+          $hidden_fields[$key] = '<input type="hidden" name="'.$key.'" value="'.$value.'">';
+        }
       }
     }
     if (isset($this->model)) {
@@ -359,7 +382,7 @@ class DataTable extends \Kotchasan\KBase
     $content = array('<div class="datatable" id="'.$this->id.'">');
     // form
     $form = array();
-    if (isset($this->perPage)) {
+    if ($this->perPage > 0) {
       $entries = Language::get('entries');
       $form[] = $this->addFilter(array(
         'name' => 'count',
@@ -377,18 +400,30 @@ class DataTable extends \Kotchasan\KBase
       }
       // ไม่ Query รายการ default
       if (!empty($items['options']) && isset($items['value']) && $items['value'] !== $items['default'] && in_array($items['value'], array_keys($items['options']), true)) {
-        $qs[] = array($key, $items['value']);
+        if (isset($items['onFilter'])) {
+          $q = call_user_func($items['onFilter'], $key, $items['value']);
+          if ($q) {
+            $qs[] = $q;
+          }
+        } elseif (is_string($key)) {
+          $qs[] = array($key, $items['value']);
+        }
+      }
+    }
+    if ($this->model) {
+      if (!empty($qs)) {
+        $this->model->andWhere($qs);
       }
     }
     // ปุ่ม Go
     if (!empty($form)) {
-      $form[] = '<fieldset>';
-      $form[] = '<input type=submit class="button go" value="'.Language::get('Go').'">';
+      $form[] = '<fieldset class=go>';
+      $form[] = '<button type=submit class="button go">'.Language::get('Go').'</button>';
       $form[] = implode('', $hidden_fields);
       $form[] = '</fieldset>';
     }
     // search
-    $search = self::$request->request('search')->text();
+    $search = self::$request->globals(array('POST', 'GET'), 'search')->text();
     if (!empty($this->searchColumns)) {
       if (!empty($search)) {
         if (isset($this->model)) {
@@ -396,45 +431,45 @@ class DataTable extends \Kotchasan\KBase
           foreach ($this->searchColumns as $key) {
             $sh[] = array($key, 'LIKE', "%$search%");
           }
-          $qs[] = $this->rs->group($sh, 'OR');
+          $this->model->andWhere($sh, 'OR');
         } elseif (isset($this->datas)) {
           // filter ข้อมูลจาก array
           $this->datas = ArrayTool::filter($this->datas, $search);
         }
+        $this->uri = $this->uri->withParams(array('search' => $search));
       }
-      $form[] = '&nbsp;<fieldset class=search>';
-      $form[] = '<label accesskey=f class="icon-search"><input type=text name=search value="'.$search.'" placeholder="'.Language::get('Search').'"></label>';
-      $form[] = '<input type=submit value="&nbsp;">';
+      $form[] = '<fieldset class=search>';
+      $form[] = '<label accesskey=f><input type=text name=search value="'.$search.'" placeholder="'.Language::get('Search').'"></label>';
+      $form[] = '<button type=submit>&#xe607;</button>';
       $form[] = '</fieldset>';
     }
     if (!empty($form)) {
-      $content[] = '<form class="table_nav" method="get">'.implode('', $form).'</form>';
+      $content[] = '<form class="table_nav" method="get" action="'.$this->uri.'">'.implode('', $form).'</form>';
     }
     if (isset($this->model)) {
-      // Model
-      $query = $this->rs->where($qs)->toArray();
+      // field select
+      $this->model->select($this->fields);
+      // จำนวนข้อมูลทั้งหมด (Query Builder)
+      $model = new \Kotchasan\Model;
+      $query = $model->db()->createQuery()
+        ->selectCount()
+        ->from(array($this->model, 'Z'));
       if ($this->cache) {
-        $this->rs->cacheOn();
+        $query->cacheOn();
       }
-      // จำนวนข้อมูลทั้งหมด
-      $count = $this->rs->count();
+      $result = $query->toArray()->execute();
+      $count = empty($result) ? 0 : $result[0]['count'];
     } elseif (!empty($this->datas)) {
-      // จำนวนข้อมูลใน array
+      // จำนวนข้อมูลทั้งหมดจาก array
       $count = sizeof($this->datas);
     } else {
+      // ไม่มีข้อมูล
       $count = 0;
     }
     // การแบ่งหน้า
-    if (empty($this->perPage)) {
-      $start = 0;
-      $totalpage = 1;
-      $page = 1;
-      $s = 1;
-      $e = $count;
-      $this->perPage = 0;
-    } else {
+    if ($this->perPage > 0) {
       // หน้าที่เลือก
-      $page = max(1, self::$request->request('page', 1)->toInt());
+      $page = max(1, self::$request->globals(array('POST', 'GET'), 'page', 1)->toInt());
       // ตรวจสอบหน้าที่เลือกสูงสุด
       $totalpage = round($count / $this->perPage);
       $totalpage += ($totalpage * $this->perPage < $count) ? 1 : 0;
@@ -443,6 +478,13 @@ class DataTable extends \Kotchasan\KBase
       // คำนวณรายการที่แสดง
       $s = $start < 0 ? 0 : $start + 1;
       $e = min($count, $s + $this->perPage - 1);
+    } else {
+      $start = 0;
+      $totalpage = 1;
+      $page = 1;
+      $s = 1;
+      $e = $count;
+      $this->perPage = 0;
     }
     // table caption
     if ($this->showCaption) {
@@ -462,7 +504,7 @@ class DataTable extends \Kotchasan\KBase
             $sort = $this->headers[$match[1]]['sort'];
           } elseif (isset($this->columns[$match[1]])) {
             $sort = $match[1];
-          } elseif (isset($this->rs) && $this->rs->fieldExists($match[1])) {
+          } elseif ($this->model && isset($this->columns[$match[1]])) {
             $sort = $match[1];
           } else {
             $sort = null;
@@ -477,7 +519,7 @@ class DataTable extends \Kotchasan\KBase
       $this->sort = implode(',', $sorts);
       if (isset($this->model)) {
         if (!empty($sorts)) {
-          $query->order($sorts);
+          $this->model->order($sorts);
         }
       } elseif (!empty($this->sorts)) {
         reset($this->sorts);
@@ -487,7 +529,7 @@ class DataTable extends \Kotchasan\KBase
     }
     if (isset($this->model)) {
       // query ข้อมูล
-      $this->datas = $this->rs->take($start, $this->perPage)->execute($this->fields);
+      $this->datas = $this->model->toArray()->limit($this->perPage, $start)->execute();
       // รายการสุดท้าย
       $end = $this->perPage + 1;
       // รายการแรก
@@ -548,14 +590,22 @@ class DataTable extends \Kotchasan\KBase
           $colspan--;
         }
       }
-      if (!empty($this->buttons)) {
-        $row[] = $this->th($i, '', array('text' => ''));
-        $colCount++;
-        $i++;
+      if ($colspan === 0) {
+        if (!empty($this->buttons)) {
+          $row[] = $this->th($i, '', array('text' => ''));
+          $colCount++;
+          $i++;
+        }
+      } else {
+        $colspan--;
       }
-      if ($this->pmButton) {
-        $row[] = $this->th($i, '', array('text' => ''));
-        $colCount++;
+      if ($colspan === 0) {
+        if ($this->pmButton) {
+          $row[] = $this->th($i, '', array('text' => ''));
+          $colCount++;
+        }
+      } else {
+        $colspan--;
       }
       // thead
       $content[] = '<thead><tr>'.implode('', $row).'</tr></thead>';
@@ -564,12 +614,18 @@ class DataTable extends \Kotchasan\KBase
         $content[] = '<tbody>'.$this->tbody($start, $end).'</tbody>';
       }
       // tfoot
-      if ($this->checkCol > -1) {
-        $row = array();
-        $row[] = '<td colspan="'.$this->checkCol.'"></td>';
-        $row[] = '<td class="check-column"><a class="checkall icon-uncheck"></a></td>';
-        $row[] = '<td colspan="'.($colCount - $this->checkCol - 1).'"></td>';
-        $content[] = '<tfoot><tr>'.implode('', $row).'</tr></tfoot>';
+      $tfoot = null;
+      if (isset($this->onCreateFooter)) {
+        $tfoot = call_user_func($this->onCreateFooter);
+      } elseif ($this->checkCol > -1) {
+        $tfoot = '<tr>';
+        $tfoot .= '<td colspan="'.$this->checkCol.'"></td>';
+        $tfoot .= '<td class="check-column"><a class="checkall icon-uncheck"></a></td>';
+        $tfoot .= '<td colspan="'.($colCount - $this->checkCol - 1).'"></td>';
+        $tfoot .= '</tr>';
+      }
+      if (!empty($tfoot)) {
+        $content[] = '<tfoot>'.$tfoot.'</tfoot>';
       }
       $content[] = '</table></div>';
       $table_nav = array();
@@ -592,8 +648,8 @@ class DataTable extends \Kotchasan\KBase
         $content[] = '<div class="table_nav action">'.implode('', $table_nav).'</div>';
       }
       // แบ่งหน้า
-      if (!empty($this->perPage)) {
-        $content[] = '<div class="splitpage">'.self::$request->getUri()->pagination($totalpage, $page).'</div>';
+      if ($this->perPage > 0) {
+        $content[] = '<div class="splitpage">'.$this->uri->pagination($totalpage, $page).'</div>';
       }
     }
     $content[] = '</div>';
@@ -626,7 +682,7 @@ class DataTable extends \Kotchasan\KBase
     $row = array();
     $n = 0;
     foreach ($this->datas as $o => $items) {
-      if (empty($this->perPage) || ($n > $start && $n < $end)) {
+      if ($this->perPage <= 0 || ($n > $start && $n < $end)) {
         $src_items = $items;
         // id ของข้อมูล
         $id = isset($items[$this->primaryKey]) ? $items[$this->primaryKey] : $o;
@@ -684,7 +740,11 @@ class DataTable extends \Kotchasan\KBase
                 $replace[] = $src_items[$k];
               }
             }
-            $row[] = str_replace($patt, $replace, $this->td($id, $i, array('class' => 'buttons'), implode('', $buttons), ''));
+            $prop = array('class' => 'buttons');
+            if (isset($this->cols['buttons']) && isset($this->cols['buttons']['class'])) {
+              $prop = array('class' => $this->cols['buttons']['class'].' buttons');
+            }
+            $row[] = str_replace($patt, $replace, $this->td($id, $i, $prop, implode('', $buttons), ''));
           }
         }
         if ($this->pmButton) {

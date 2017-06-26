@@ -1,5 +1,5 @@
 <?php
-/*
+/**
  * @filesource Kotchasan/load.php
  * @link http://www.kotchasan.com/
  * @copyright 2016 Goragod.com
@@ -34,7 +34,7 @@ if (DEBUG > 0) {
  *
  * @var string
  */
-define('VERSION', '1.0.0');
+define('VERSION', '1.2.0');
 /**
  * กำหนดการบันทึกการ query ฐานข้อมูล
  * ควรกำหนดเป็น false ขณะใช้งานจริง
@@ -56,14 +56,30 @@ define('VENDOR_DIR', $vendorDir);
 /**
  *  document root (Server)
  */
+$contextPrefix = '';
 if (isset($_SERVER['APPL_PHYSICAL_PATH'])) {
   $docRoot = rtrim(realpath($_SERVER['APPL_PHYSICAL_PATH']), DIRECTORY_SEPARATOR);
-} elseif (isset($_SERVER['CONTEXT_DOCUMENT_ROOT'])) {
-  $docRoot = rtrim(realpath($_SERVER['CONTEXT_DOCUMENT_ROOT']), DIRECTORY_SEPARATOR);
-} else {
+} elseif (strpos($_SERVER['SCRIPT_FILENAME'], $_SERVER['DOCUMENT_ROOT']) !== false) {
   $docRoot = rtrim(realpath($_SERVER['DOCUMENT_ROOT']), DIRECTORY_SEPARATOR);
+} else {
+  $docRoot = dirname($vendorDir);
+  $dir = basename($docRoot);
+  $ds = explode($dir, dirname($_SERVER['SCRIPT_NAME']), 2);
+  if (sizeof($ds) > 1) {
+    $contextPrefix = $ds[0].$dir;
+    $appPath = $ds[1];
+    if (DIRECTORY_SEPARATOR != '/') {
+      $contextPrefix = str_replace('\\', '/', $contextPrefix);
+    }
+  }
+  if (!defined('APP_PATH')) {
+    define('APP_PATH', $docRoot.$appPath.'/');
+  }
+  if (!defined('BASE_PATH')) {
+    define('BASE_PATH', $contextPrefix.$appPath.'/');
+  }
 }
-if (DIRECTORY_SEPARATOR != '/') {
+if (DIRECTORY_SEPARATOR != '/' && $docRoot != '') {
   $docRoot = str_replace('\\', '/', $docRoot);
 }
 /**
@@ -71,10 +87,6 @@ if (DIRECTORY_SEPARATOR != '/') {
  */
 if (!defined('APP_PATH')) {
   $appPath = dirname($_SERVER['SCRIPT_NAME']);
-  if (!empty($_SERVER['CONTEXT_PREFIX'])) {
-    $ds = explode($_SERVER['CONTEXT_PREFIX'], $appPath);
-    $appPath = $ds[1];
-  }
   if (DIRECTORY_SEPARATOR != '/') {
     $appPath = str_replace('\\', '/', $appPath);
   }
@@ -89,7 +101,13 @@ if (!defined('ROOT_PATH')) {
 /**
  *  http หรือ https
  */
-$scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') || (isset($_SERVER['SERVER_PORT']) && $_SERVER['SERVER_PORT'] == 443) ? 'https://' : 'http://';
+if (isset($_SERVER['HTTP_X_FORWARDED_PROTO'])) {
+  $scheme = $_SERVER['HTTP_X_FORWARDED_PROTO'].'://';
+} elseif ((!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') || (isset($_SERVER['SERVER_PORT']) && $_SERVER['SERVER_PORT'] == 443)) {
+  $scheme = 'https://';
+} else {
+  $scheme = 'http://';
+}
 /**
  * host name
  */
@@ -116,12 +134,11 @@ if (!defined('BASE_PATH')) {
     define('BASE_PATH', rtrim($basePath, '/').'/');
   }
 }
-
 /**
  * URL ของเว็บไซต์รวม path เช่น http://domain.tld/folder
  */
 if (!defined('WEB_URL')) {
-  define('WEB_URL', $scheme.$host.str_replace($docRoot, '', ROOT_PATH));
+  define('WEB_URL', $scheme.$host.$contextPrefix.str_replace($docRoot, '', ROOT_PATH));
 }
 /**
  * โฟลเดอร์เก็บข้อมูล
@@ -134,6 +151,16 @@ if (!defined('DATA_FOLDER')) {
  */
 if (!defined('TEMPLATE_ROOT')) {
   define('TEMPLATE_ROOT', APP_PATH);
+}
+/**
+ * กำหนดจำนวนครั้งในการตรวจสอบ token
+ * ถ้ามีการตรวจสอบ token เกินกว่าที่กำหนดจะถูกลบออก
+ * ป้องกันการ buteforce
+ *
+ * @var int
+ */
+if (!defined('TOKEN_LIMIT')) {
+  define('TOKEN_LIMIT', 10);
 }
 
 /**
@@ -211,6 +238,8 @@ function getClassPath($className)
   } elseif (preg_match('/^([\/a-zA-Z0-9]+)$/', $className)) {
     if (is_file(VENDOR_DIR.$className.'.php')) {
       return VENDOR_DIR.$className.'.php';
+    } elseif (is_file(APP_PATH.$className.'.php')) {
+      return APP_PATH.$className.'.php';
     } elseif (is_file(ROOT_PATH.$className.'.php')) {
       return ROOT_PATH.$className.'.php';
     } else {

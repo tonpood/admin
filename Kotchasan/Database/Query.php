@@ -1,5 +1,5 @@
 <?php
-/*
+/**
  * @filesource Kotchasan/Database/Query.php
  * @link http://www.kotchasan.com/
  * @copyright 2016 Goragod.com
@@ -8,9 +8,8 @@
 
 namespace Kotchasan\Database;
 
-use \Kotchasan\Database;
-use \Kotchasan\Database\Driver;
 use \Kotchasan\ArrayTool;
+use \Kotchasan\Database\Sql;
 
 /**
  * Database Query (base class)
@@ -19,14 +18,8 @@ use \Kotchasan\ArrayTool;
  *
  * @since 1.0
  */
-abstract class Query extends \Kotchasan\KBase
+abstract class Query extends \Kotchasan\Database\Db
 {
-  /**
-   * database connection
-   *
-   * @var Driver
-   */
-  protected $db;
   /**
    * ตัวแปรเก็บคำสั่ง SQL
    *
@@ -35,58 +28,10 @@ abstract class Query extends \Kotchasan\KBase
   protected $sqls;
 
   /**
-   * Class constructor
-   *
-   * @param string $conn ชื่อของการเชื่อมต่อ ถ้าไม่ระบุจะไม่มีการเชื่อมต่อ database
-   */
-  public function __construct($conn)
-  {
-    $this->db = Database::create($conn);
-  }
-
-  /**
-   * อ่าน database connection
-   *
-   * @return Driver
-   */
-  public function db()
-  {
-    return $this->db;
-  }
-
-  /**
-   * ฟังก์ชั่นสร้าง SQL สำหรับหาค่าสูงสุด + 1
-   * ใช้ในการหาค่า id ถัดไป
-   *
-   * @param string $field ชื่อฟิลด์ที่ต้องการหาค่าสูงสุด
-   * @param string $table ชื่อตาราง
-   * @param mixed $condition query WHERE
-   * @param string $alias ชื่อของผลลัพท์ ถ้าไม่ระบุจะเป็นชื่อเดียวกับชื่อฟิลด์
-   * @return string SQL Command
-   */
-  public function buildNext($field, $table, $condition = null, $alias = null)
-  {
-    return $this->db->buildNext($field, $this->getFullTableName($table), $condition, $alias);
-  }
-
-  /**
-   * อ่านค่ากำหนดของฐานข้อมูล
-   *
-   * @param string $key
-   * @return mixed
-   */
-  public function getSetting($key)
-  {
-    if (isset($this->db->settings->$key)) {
-      return $this->db->settings->$key;
-    }
-  }
-
-  /**
    * ฟังก์ชั่นสำหรับจัดกลุ่มคำสั่ง และ เชื่อมแต่ละกลุ่มด้วย AND
    *
    * @param array $params คำสั่ง รูปแบบ array('field1', 'condition', 'field2')
-   * @return string query ภายใต้ ()
+   * @return Sql
    */
   protected function groupAnd($params)
   {
@@ -97,14 +42,14 @@ abstract class Query extends \Kotchasan\KBase
     foreach ($params as $i => $item) {
       $sqls[] = $this->buildValue($item);
     }
-    return '('.implode(' AND ', $sqls).')';
+    return Sql::create('('.implode(' AND ', $sqls).')');
   }
 
   /**
    * ฟังก์ชั่นสำหรับจัดกลุ่มคำสั่ง และ เชื่อมแต่ละกลุ่มด้วย OR
    *
    * @param array $params คำสั่ง รูปแบบ array('field1', 'condition', 'field2')
-   * @return string
+   * @return Sql
    */
   protected function groupOr($params)
   {
@@ -115,28 +60,24 @@ abstract class Query extends \Kotchasan\KBase
     foreach ($params as $i => $item) {
       $sqls[] = $this->buildValue($item);
     }
-    return '('.implode(' OR ', $sqls).')';
+    return Sql::create('('.implode(' OR ', $sqls).')');
   }
 
   /**
-   * ฟังก์ชั่นสร้างคำสั่ง SQL เป้นข้อความ
+   * ฟังก์ชั่นสร้างคำสั่ง SQL เป็นข้อความ
    *
    * @return string
    */
   public function text()
   {
-    if (empty($this->sqls)) {
-      return '';
-    } else {
+    if (!empty($this->sqls)) {
       $sql = $this->db->makeQuery($this->sqls);
-      $values = $this->getValues();
-      if (!empty($values)) {
-        foreach ($values as $key => $value) {
-          $sql = str_replace($key, is_string($value) ? "'$value'" : $value, $sql);
-        }
+      foreach ($this->getValues() as $key => $value) {
+        $sql = str_replace($key, (is_string($value) ? "'$value'" : $value), $sql);
       }
       return $sql;
     }
+    return '';
   }
 
   /**
@@ -190,7 +131,7 @@ abstract class Query extends \Kotchasan\KBase
   /**
    * ฟังก์ชั่นสร้าง query string สำหรับคำสั่ง SELECT
    *
-   * @param string $fields
+   * @param string|array|QueryBuilder $fields
    * @return string
    */
   protected function buildSelect($fields)
@@ -199,7 +140,7 @@ abstract class Query extends \Kotchasan\KBase
       if ($fields[0] instanceof QueryBuilder) {
         // QueryBuilder
         $ret = '('.$fields[0]->text().') AS `'.$fields[1].'`';
-      } elseif (preg_match('/^([a-zA-Z0-9\\\]+)::([a-zA-Z0-9]+)$/', $fields[0], $match)) {
+      } elseif (is_string($fields[0]) && preg_match('/^([a-zA-Z0-9\\\]+)::([a-zA-Z0-9]+)$/', $fields[0], $match)) {
         // Recordset
         $ret = '\''.addslashes($fields[0]).'\' AS `'.$fields[1].'`';
       } else {
@@ -208,35 +149,36 @@ abstract class Query extends \Kotchasan\KBase
         foreach ($fields AS $item) {
           $rets[] = $this->buildSelect($item);
         }
-        $ret = implode(', ', $rets);
+        $ret = implode(',', $rets);
       }
-    } else {
-      if ($fields == '*') {
-        $ret = '*';
-      } elseif (strpos($fields, '(') !== false && preg_match('/^(.*?)(\s{0,}(as)?\s{0,}`?([a-z0-9_]+)`?)?$/i', $fields, $match)) {
-        // (...) alias
-        $ret = $match[1].(isset($match[4]) ? " AS `$match[4]`" : '');
-      } elseif (preg_match('/^([0-9]+)([\s]+as)?[\s]+`?([^`]+)`?$/i', $fields, $match)) {
-        // 0 as alias
-        $ret = $match[1].' AS `'.$match[3].'`';
-      } elseif (preg_match('/^([\'"])(.*)\\1([\s]+as)?[\s]+`?([^`]+)`?$/i', $fields, $match)) {
-        // 'string' as alias
-        $ret = "'$match[2]' AS `$match[4]`";
-      } elseif (preg_match('/^([A-Z0-9]{1,2})\.`?([\*a-z0-9_]+)`?(([\s]+as)?[\s]+`?([^`]+)`?)?$/i', $fields, $match)) {
-        // U.id alias
-        $ret = $match[1].'.'.($match[2] == '*' ? '*' : '`'.$match[2].'`').(isset($match[5]) ? ' AS `'.$match[5].'`' : '');
-      } elseif (preg_match('/^`?([a-z0-9_]+)`?\.`?([\*a-z0-9_]+)`?(([\s]+as)?[\s]+`?([^`]+)`?)?$/i', $fields, $match)) {
-        // table.field alias
-        $ret = '`'.$match[1].'`.'.($match[2] == '*' ? '*' : '`'.$match[2].'`').(isset($match[5]) ? ' AS `'.$match[5].'`' : '');
-      } elseif (preg_match('/^`?([a-z0-9_]+)`?([\s]+as)?[\s]+`?([^`]+)`?$/i', $fields, $match)) {
-        // table.field
-        $ret = '`'.$match[1].'` AS `'.$match[3].'`';
-      } elseif (preg_match('/([a-z0-9_]+)/i', $fields, $match)) {
-        // field name เช่น id
-        $ret = '`'.$fields.'`';
-      }
+    } elseif ($fields instanceof QueryBuilder) {
+      // QueryBuilder
+      $ret = '('.$fields->text().')';
+    } elseif ($fields instanceof Sql) {
+      // Sql
+      $ret = $fields->text();
+    } elseif ($fields == '*') {
+      $ret = '*';
+    } elseif (preg_match('/^([0-9]+)([\s]+as)?[\s]+`?([^`]+)`?$/i', $fields, $match)) {
+      // 0 as alias
+      $ret = $match[1].' AS `'.$match[3].'`';
+    } elseif (preg_match('/^([\'"])(.*)\\1([\s]+as)?[\s]+`?([^`]+)`?$/i', $fields, $match)) {
+      // 'string' as alias
+      $ret = "'$match[2]' AS `$match[4]`";
+    } elseif (preg_match('/^([A-Z0-9]{1,2})\.`?([\*a-z0-9_]+)`?(([\s]+as)?[\s]+`?([^`]+)`?)?$/i', $fields, $match)) {
+      // U.id alias
+      $ret = $match[1].'.'.($match[2] == '*' ? '*' : '`'.$match[2].'`').(isset($match[5]) ? ' AS `'.$match[5].'`' : '');
+    } elseif (preg_match('/^`?([a-z0-9_]+)`?\.`?([\*a-z0-9_]+)`?(([\s]+as)?[\s]+`?([^`]+)`?)?$/i', $fields, $match)) {
+      // table.field alias
+      $ret = '`'.$match[1].'`.'.($match[2] == '*' ? '*' : '`'.$match[2].'`').(isset($match[5]) ? ' AS `'.$match[5].'`' : '');
+    } elseif (preg_match('/^`?([a-z0-9_]+)`?([\s]+as)?[\s]+`?([^`]+)`?$/i', $fields, $match)) {
+      // table.field
+      $ret = '`'.$match[1].'` AS `'.$match[3].'`';
+    } elseif (preg_match('/([a-z0-9_]+)/i', $fields, $match)) {
+      // field name เช่น id
+      $ret = '`'.$fields.'`';
     }
-    return $ret;
+    return isset($ret) ? $ret : '';
   }
 
   /**
@@ -460,31 +402,22 @@ abstract class Query extends \Kotchasan\KBase
         if (!empty($ps)) {
           $ret = array($ret, $ps);
         }
-      } elseif (is_string($condition[0]) && strpos($condition[0], '(') !== false) {
-        $qs = array($condition[0]);
-        $ps = array();
-        unset($condition[0]);
-        foreach ($condition as $i => $item) {
-          $ret = $this->whereValue($item, $i);
-          if (is_array($ret)) {
-            $qs[] = $ret[0];
-            $ps = ArrayTool::replace($ps, $ret[1]);
-          } else {
-            $qs[] = $ret;
-          }
-        }
-        $ret = implode(' '.$operator.' ', $qs);
-        if (!empty($ps)) {
-          $ret = array($ret, $ps);
-        }
       } else {
         $ret = $this->whereValue($condition);
+      }
+    } elseif ($condition instanceof Sql) {
+      $values = $condition->getValues();
+      if (empty($values)) {
+        $ret = $condition->text();
+      } else {
+        $ret = array($condition->text(), $values);
       }
     } elseif (preg_match('/^[0-9]+$/', $condition)) {
       // primaryKey
       $ret = $this->fieldName($id).' = '.$condition;
     } else {
-      $ret = $condition;
+      // พารามิเตอร์ ไม่ถูกต้อง
+      throw new \InvalidArgumentException('Invalid arguments in buildWhere');
     }
     return $ret;
   }
@@ -566,6 +499,13 @@ abstract class Query extends \Kotchasan\KBase
         } else {
           $result = array($key.' '.$operator.' ('.$value->text().')', $values);
         }
+      } elseif ($value instanceof Sql) {
+        $values = $value->getValues();
+        if (empty($values)) {
+          $result = $key.' '.$operator.' '.$value->text();
+        } else {
+          $result = array($key.' '.$operator.' '.$value->text(), $values);
+        }
       } elseif (is_array($value)) {
         if ($operator == '=') {
           $operator = 'IN';
@@ -576,7 +516,7 @@ abstract class Query extends \Kotchasan\KBase
         foreach ($value as $i => $item) {
           if (empty($item)) {
             $qs[] = is_string($item) ? "'$item'" : $item;
-          } elseif (is_string($item) && preg_match('/([a-zA-Z0-9]{1,2})\.`?([a-zA-Z0-9_\-]+)`?/', $item, $match)) {
+          } elseif (is_string($item) && preg_match('/^([a-zA-Z0-9]{1,2})\.`?([a-zA-Z0-9_\-]+)`?$/', $item, $match)) {
             $qs[] = "$match[1].`$match[2]`";
           } else {
             $qs[] = $q.$i;
@@ -594,9 +534,6 @@ abstract class Query extends \Kotchasan\KBase
       } elseif (preg_match('/^[0-9\s\-:]+$/', $value)) {
         // วันที่
         $result = "$key $operator '$value'";
-      } elseif (preg_match('/^\((.*)\)([\s]+as)?[\s]+([a-z0-9_]+)$/i', $value, $match)) {
-        // value เป็น query string
-        $result = "$key $operator ($match[1]) AS `$match[3]`";
       } elseif (preg_match('/^([A-Z0-9]{1,2})\.([a-zA-Z0-9_]+)$/', $value, $match)) {
         // U.id
         if ($operator == 'IN' || $operator == 'NOT IN') {

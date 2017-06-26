@@ -1,5 +1,5 @@
 <?php
-/*
+/**
  * @filesource Kotchasan/Form.php
  * @link http://www.kotchasan.com/
  * @copyright 2016 Goragod.com
@@ -39,6 +39,20 @@ class Form extends \Kotchasan\KBase
    * @var string
    */
   public $javascript;
+  /**
+   * ตับแปรบอกว่ามีการใช้ form แบบ Ajax หรือไม่
+   * ถ้าใช้งานต้องมีการเรียกใช้ GAjax ด้วย
+   *
+   * @var boolean
+   */
+  public $ajax;
+  /**
+   * ตัวแปรบอกว่ามีการใช้งานฟอร์มร่วมกับ GForm หรือไม่
+   * ถ้าใช้งานต้องมีการเรียกใช้ GAjax ด้วย
+   *
+   * @var boolean
+   */
+  public $gform;
 
   /**
    * ฟังก์ชั่นสร้าง Form Element
@@ -60,9 +74,11 @@ class Form extends \Kotchasan\KBase
     foreach ($this->attributes as $k => $v) {
       switch ($k) {
         case 'itemClass':
+        case 'itemId':
         case 'labelClass':
         case 'label':
         case 'comment':
+        case 'unit':
         case 'value':
         case 'dataPreview':
         case 'previewSrc':
@@ -74,6 +90,7 @@ class Form extends \Kotchasan\KBase
         case 'antispamid':
         case 'text':
         case 'validator':
+        case 'result':
           $$k = $v;
           break;
         case 'result':
@@ -102,22 +119,28 @@ class Form extends \Kotchasan\KBase
       $name = $id;
       $prop['name'] = 'name="'.$name.'"';
     }
-    if (isset($id)) {
-      if (isset($validator)) {
-        $js = array();
-        $js[] = '"'.$id.'"';
-        $js[] = '"'.$validator[0].'"';
-        $js[] = $validator[1];
-        if (isset($validator[2])) {
-          $js[] = '"'.$validator[2].'"';
-          $js[] = empty($validator[3]) || $validator[3] === null ? 'null' : '"'.$validator[3].'"';
-          $js[] = '"'.Html::$form->attributes['id'].'"';
+    if (isset(Html::$form)) {
+      if (isset($id) && Html::$form->gform) {
+        if (isset($validator)) {
+          $js = array();
+          $js[] = '"'.$id.'"';
+          $js[] = '"'.$validator[0].'"';
+          $js[] = $validator[1];
+          if (isset($validator[2])) {
+            $js[] = '"'.$validator[2].'"';
+            $js[] = empty($validator[3]) || $validator[3] === null ? 'null' : '"'.$validator[3].'"';
+            $js[] = '"'.Html::$form->attributes['id'].'"';
+          }
+          $this->javascript[] = 'new GValidator('.implode(', ', $js).');';
+          unset($validator);
         }
-        $this->javascript[] = 'new GValidator('.implode(', ', $js).');';
-        unset($validator);
-      }
-      foreach ($event as $on => $func) {
-        $this->javascript[] = '$G("'.$id.'").addEvent("'.$on.'", '.$func.');';
+        foreach ($event as $on => $func) {
+          $this->javascript[] = '$G("'.$id.'").addEvent("'.$on.'", '.$func.');';
+        }
+      } elseif (!Html::$form->gform) {
+        foreach ($event as $on => $func) {
+          $prop['on'.$on] = 'on'.$on.'="'.$func.'()"';
+        }
       }
     }
     if ($this->tag == 'select') {
@@ -157,18 +180,25 @@ class Form extends \Kotchasan\KBase
     } elseif (isset($value)) {
       if ($this->tag === 'textarea') {
         $value = str_replace(array('{', '}', '&amp;'), array('&#x007B;', '&#x007D;', '&'), htmlspecialchars($value));
-      } else {
+      } elseif ($this->tag != 'button') {
         $prop['value'] = 'value="'.str_replace('&amp;', '&', htmlspecialchars($value)).'"';
       }
     }
-    if (empty($prop['title']) && !empty($comment)) {
-      $prop['title'] = 'title="'.strip_tags($comment).'"';
+    if (empty($prop['title'])) {
+      if (!empty($comment)) {
+        $prop['title'] = 'title="'.strip_tags($comment).'"';
+      } elseif (!empty($label)) {
+        $prop['title'] = 'title="'.strip_tags($label).'"';
+      }
     }
     if (isset($dataPreview)) {
       $prop['data-preview'] = 'data-preview="'.$dataPreview.'"';
     }
+    if (isset($result)) {
+      $prop['data-result'] = 'data-result="result_'.$result.'"';
+    }
     if (isset($accept) && is_array($accept)) {
-      $prop['accept'] = 'accept="'.Mime::getEccept($accept).'"';
+      $prop['accept'] = 'accept="'.Mime::getAccept($accept).'"';
     }
     if (isset($multiple)) {
       $prop['multiple'] = 'multiple';
@@ -185,7 +215,8 @@ class Form extends \Kotchasan\KBase
       $element = Antispam::createImage($antispamid, true).$element;
     }
     if (empty($itemClass)) {
-      $input = empty($comment) ? '' : '<div class="item">';
+      $input = empty($comment) ? '' : '<div class="item"'.(empty($itemId) ? '' : ' id="'.$itemId.'"').'>';
+      $input = empty($unit) ? '' : '<div class="wlabel">';
       if (empty($labelClass) && empty($label)) {
         $input .= $element;
       } elseif (isset($type) && ($type === 'checkbox' || $type === 'radio')) {
@@ -193,11 +224,17 @@ class Form extends \Kotchasan\KBase
       } else {
         $input .= '<label'.(empty($labelClass) ? '' : ' class="'.$labelClass.'"').'>'.(empty($label) ? '' : $label.'&nbsp;').$element.'</label>';
       }
+      if (!empty($unit)) {
+        $input .= '<span class=label>'.$unit.'</span></div>';
+      }
       if (!empty($comment)) {
-        $input .= '<div class="comment"'.(empty($id) ? '' : ' id="result_'.$id.'"').'>'.$comment.'</div></div>';
+        $input .= '<div class="comment"'.(empty($id) ? '' : ' id="result_'.$id.'"').'>'.$comment.'</div>';
       }
     } else {
-      $input = '<div class="'.$itemClass.'">';
+      if (!empty($unit)) {
+        $itemClass .= ' wlabel';
+      }
+      $input = '<div class="'.$itemClass.'"'.(empty($itemId) ? '' : ' id="'.$itemId.'"').'>';
       if (isset($type) && $type === 'checkbox') {
         $input .= '<label'.(empty($labelClass) ? '' : ' class="'.$labelClass.'"').'>'.$element.'&nbsp;'.$label.'</label>';
       } else {
@@ -208,6 +245,9 @@ class Form extends \Kotchasan\KBase
           $input .= '<label for="'.$id.'">'.$label.'</label>';
         }
         $input .= '<span'.(empty($labelClass) ? '' : ' class="'.$labelClass.'"').'>'.$element.'</span>';
+        if (!empty($unit)) {
+          $input .= '<span class=label>'.$unit.'</span>';
+        }
       }
       if (!empty($comment)) {
         $input .= '<div class="comment"'.(empty($id) ? '' : ' id="result_'.$id.'"').'>'.$comment.'</div>';
@@ -296,6 +336,15 @@ class Form extends \Kotchasan\KBase
     $obj = new static;
     $obj->tag = 'input';
     $attributes['type'] = 'date';
+    $obj->attributes = $attributes;
+    return $obj;
+  }
+
+  public static function time($attributes = array())
+  {
+    $obj = new static;
+    $obj->tag = 'input';
+    $attributes['type'] = 'time';
     $obj->attributes = $attributes;
     return $obj;
   }
@@ -436,8 +485,13 @@ class Form extends \Kotchasan\KBase
   {
     $hiddens = array();
     foreach (self::$request->getQueryParams() AS $key => $value) {
-      if (preg_match('/^[_]+(.*)$/', $key, $match)) {
-        $hiddens[] = '<input type="hidden" name="_'.$match[1].'" value="'.$value.'">';
+      if ($value != '' && preg_match('/^[_]+([^0-9]+)$/', $key, $match)) {
+        $hiddens[$match[1]] = '<input type="hidden" name="_'.$match[1].'" value="'.$value.'">';
+      }
+    }
+    foreach (self::$request->getParsedBody() AS $key => $value) {
+      if ($value != '' && preg_match('/^[_]+([^0-9]+)$/', $key, $match)) {
+        $hiddens[$match[1]] = '<input type="hidden" name="_'.$match[1].'" value="'.$value.'">';
       }
     }
     return $hiddens;

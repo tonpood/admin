@@ -1,5 +1,5 @@
 <?php
-/*
+/**
  * @filesource Gcms/Login.php
  * @link http://www.kotchasan.com/
  * @copyright 2016 Goragod.com
@@ -12,7 +12,7 @@ use \Kotchasan\Model;
 use \Kotchasan\Language;
 
 /**
- * คลาสสำหรับตรวจสอบการ Login กับ Database
+ * คลาสสำหรับตรวจสอบการ Login
  *
  * @author Goragod Wiriya <admin@goragod.com>
  *
@@ -44,7 +44,7 @@ class Login extends \Kotchasan\Login implements \Kotchasan\LoginInterface
       ->toArray();
     $login_result = null;
     foreach ($query->execute() as $item) {
-      if ($item['password'] == md5($password.$item[reset(self::$cfg->login_fields)])) {
+      if ($item['password'] == sha1($password.$item[reset(self::$cfg->login_fields)])) {
         $login_result = $item;
         break;
       }
@@ -52,11 +52,7 @@ class Login extends \Kotchasan\Login implements \Kotchasan\LoginInterface
     if ($login_result === null) {
       // user หรือ password ไม่ถูกต้อง
       self::$login_input = isset($item) ? 'password' : 'username';
-      return isset($item) ? str_replace(':name', Language::get('Password'), Language::get('Incorrect :name')) : Language::get('not a registered user');
-    } elseif (!empty($login_result['activatecode'])) {
-      // ยังไม่ได้ activate
-      self::$login_input = 'username';
-      return Language::get('No confirmation email, please check your e-mail');
+      return isset($item) ? Language::replace('Incorrect :name', array(':name' => Language::get('Password'))) : Language::get('not a registered user');
     } elseif (!empty($login_result['ban'])) {
       // ติดแบน
       self::$login_input = 'username';
@@ -67,7 +63,7 @@ class Login extends \Kotchasan\Login implements \Kotchasan\LoginInterface
   }
 
   /**
-   * ฟังก์ชั่นตรวจสอบการ login
+   * ฟังก์ชั่นตรวจสอบการ login และบันทึกการเข้าระบบ
    *
    * @param string $username
    * @param string $password
@@ -82,7 +78,7 @@ class Login extends \Kotchasan\Login implements \Kotchasan\LoginInterface
     } else {
       // model
       $model = new Model;
-      // ตรวจสอบการ login มากกว่า 1 ip
+      // ip ที่ login
       $ip = self::$request->getClientIp();
       // current session
       $session_id = session_id();

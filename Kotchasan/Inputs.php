@@ -1,5 +1,5 @@
 <?php
-/*
+/**
  * @filesource Kotchasan/Inputs.php
  * @link http://www.kotchasan.com/
  * @copyright 2016 Goragod.com
@@ -83,7 +83,13 @@ class Inputs implements \Iterator
       }
       return $array;
     }
-    return $item->$name($arguments);
+    if (isset($arguments[0])) {
+      return $item->$name($arguments[0]);
+    } elseif (isset($arguments[1])) {
+      return $item->$name($arguments[0], $arguments[1]);
+    } else {
+      return $item->$name($arguments);
+    }
   }
 
   /**

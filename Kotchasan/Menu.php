@@ -1,5 +1,5 @@
 <?php
-/*
+/**
  * @filesource Kotchasan/Menu.php
  * @link http://www.kotchasan.com/
  * @copyright 2016 Goragod.com
@@ -33,7 +33,7 @@ class Menu
         $menus[] = self::render($values['submenus'], $select);
         $menus[] = '</ul>';
       } else {
-        $menus[] = self::getItem($alias, $values, false, $select);
+        $menus[] = self::getItem($alias, $values, false, $select).'</li>';
       }
     }
     return implode('', $menus);
@@ -50,7 +50,6 @@ class Menu
    */
   protected static function getItem($name, $item, $arrow, $select)
   {
-
     if (empty($name) && !is_int($name)) {
       $c = '';
     } else {

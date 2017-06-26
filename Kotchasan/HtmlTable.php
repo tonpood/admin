@@ -1,5 +1,5 @@
 <?php
-/*
+/**
  * @filesource Kotchasan/HtmlTable.php
  * @link http://www.kotchasan.com/
  * @copyright 2016 Goragod.com
@@ -86,23 +86,23 @@ class HtmlTable
   /**
    * แทรกแถวของ thead
    *
-   * @param array $header
+   * @param array $headers
    */
-  public function addHeader($header)
+  public function addHeader($headers)
   {
-    $this->thead[] = $header;
+    $this->thead[] = $headers;
   }
 
   /**
    * แทรกแถวของ tbody
    *
-   * @param array $row
+   * @param array $rows
    * @param array $attributes
    */
-  public function addRow($row, $attributes = array())
+  public function addRow($rows, $attributes = array())
   {
     $tr = TableRow::create($attributes);
-    foreach ($row as $td) {
+    foreach ($rows as $td) {
       $tr->addCell($td);
     }
     $this->tbody[] = $tr;
